@@ -29,6 +29,7 @@ uv run pytest tests/path/to/specific_test.py  # single test file
 uv run black .  # format code
 uv run isort .  # sort imports  
 uv run ty check  # type checker
+uv run ruff check  # linting
 ```
 
 **Coverage:**
@@ -43,10 +44,17 @@ uv run swash-mesh  # or uv run sm for short
 
 ## Code Architecture
 
-- **src/cli.py**: Main CLI entry point using Typer framework
-- The CLI is initialized but currently has no commands registered
-- Uses gmsh for mesh generation (key dependency)
-- Package provides two console scripts: `swash-mesh` and `sm` (shorthand)
+The package follows a clean separation between CLI interface and core functionality:
+
+- **src/cli.py**: Typer-based CLI with `create`/`c` and `apply`/`a` commands for mesh creation and application
+- **src/main.py**: Core business logic with `create_mesh()` and `apply_mesh()` functions
+- **src/__init__.py**: Package interface exposing main functions
+- **examples/**: Sample SWASH configurations including 1D wave channel setup
+
+### Current Implementation Status
+- CLI framework complete with proper argument handling and help text
+- Core functions implemented with file validation but mesh generation logic pending
+- Ready for gmsh integration and SWASH file parsing implementation
 
 ## Code Style
 
@@ -58,5 +66,15 @@ uv run swash-mesh  # or uv run sm for short
 
 ## Development Workflow
 
-- Always run black after modifying files to ensure consistent formatting
+- Always run code quality tools (`black`, `isort`, `ruff`, `ty check`) after modifying files
 - Ensure strings and docstrings are split to respect the 79 character line length maximum
+- No test suite exists yet - tests should be created in `tests/` directory following pytest conventions
+
+## Key Dependencies
+
+- **gmsh**: Core mesh generation library for creating unstructured meshes from bathymetry data
+- **typer**: Modern CLI framework providing the command interface
+
+## Testing Principles
+
+- Never mock anything. Always use simple reusable fixtures.
