@@ -55,3 +55,8 @@ uv run swash-mesh  # or uv run sm for short
 - Python 3.13 target
 - pytest timeout set to 60 seconds
 - Warnings filtered for DeprecationWarning, FutureWarning, UserWarning
+
+## Development Workflow
+
+- Always run black after modifying files to ensure consistent formatting
+- Ensure strings and docstrings are split to respect the 79 character line length maximum
