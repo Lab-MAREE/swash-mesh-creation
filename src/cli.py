@@ -46,10 +46,12 @@ def _init_cli() -> typer.Typer:
 
 
 def _create_mesh(
-    bathymetry_file: str = typer.Argument(..., help="Bathymetry file"),
+    swash_dir: str = typer.Argument(
+        ...,
+        help="Directory containing the swash input files (INPUT, bathymetry.txt and gauge_positions.txt)",
+    ),
 ) -> None:
-    bathymetry_file_ = Path(bathymetry_file)
-    main.create_mesh(bathymetry_file_)
+    main.create_mesh(Path(swash_dir))
 
 
 def _apply_mesh(

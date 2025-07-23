@@ -10,11 +10,35 @@ from src import utils
 ##########
 
 
-def read_bathymetry(path: Path) -> np.ndarray:
-    bathymetry = np.loadtxt(path).astype(np.float64)
+def read_bathymetry(swash_dir: Path) -> tuple[np.ndarray, tuple[float, float]]:
+    bathymetry = np.loadtxt(swash_dir / "bathymetry.txt").astype(np.float64)
+    _, (x_resolution, y_resolution) = _get_input_dimensions(
+        swash_dir / "INPUT"
+    )
     if bathymetry.ndim != 2:
         raise ValueError("Mesh creation is only available for a 2D context.")
-    return bathymetry
+    return bathymetry, (x_resolution, y_resolution)
+
+
+def extract_shoreline_boundary(
+    bathymetry: np.ndarray, resolution: tuple[float, float]
+) -> list[tuple[float, float]]:
+    x_resolution, y_resolution = resolution
+
+    points: list[tuple[float, float]] = []
+
+    for j in range(bathymetry.shape[0] - 1):
+        for i in range(bathymetry.shape[1] - 1):
+            corners = (
+                bathymetry[j, i],
+                bathymetry[j + 1, i],
+                bathymetry[j, i + 1],
+                bathymetry[j + 1, i + 1],
+            )
+            if min(corners) <= 0 and max(corners) > 0:
+                points.append((i * x_resolution, j * y_resolution))
+
+    return sorted(points)
 
 
 def create_diagram(swash_dir: Path) -> go.Figure:
@@ -24,6 +48,9 @@ def create_diagram(swash_dir: Path) -> go.Figure:
         swash_dir / "INPUT"
     )
     x_edges, y_edges = _get_mesh(swash_dir / "INPUT")
+    shoreline = extract_shoreline_boundary(
+        bathymetry, (x_resolution, y_resolution)
+    )
 
     if bathymetry.ndim != 2:
         raise ValueError("The diagram implementation needs a 2d bathymetry.")
@@ -70,6 +97,17 @@ def create_diagram(swash_dir: Path) -> go.Figure:
                     "color": utils.plotting.named_colours["red"],
                     "symbol": "diamond",
                     "size": 10,
+                },
+            ),
+            go.Scatter(
+                x=[x[0] for x in shoreline],
+                y=[x[1] for x in shoreline],
+                mode="lines",
+                name="Shoreline",
+                hoverinfo="skip",
+                line={
+                    "color": utils.plotting.named_colours["orange"],
+                    "width": 2,
                 },
             ),
             go.Scatter(

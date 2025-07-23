@@ -1,12 +1,23 @@
 from pathlib import Path
 
+from . import mesh, swash
+
 ##########
 # public #
 ##########
 
 
-def create_mesh(bathymetry_file: Path) -> None:
-    _verify_file_existence([bathymetry_file])
+def create_mesh(swash_dir: Path) -> None:
+    _verify_file_existence(
+        [
+            swash_dir / "INPUT",
+            swash_dir / "bathymetry.txt",
+        ]
+    )
+
+    bathymetry, resolution = swash.read_bathymetry(swash_dir)
+
+    mesh.create_mesh(bathymetry, resolution)
 
 
 def apply_mesh(
