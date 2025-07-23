@@ -112,6 +112,83 @@ def _generate_mesh(
 
 
 def _write_mesh() -> None:
-    # write mesh
+    # write mesh in gmsh format for reference
     gmsh.write("mesh.msh")
+
+    # convert to Triangle format for SWASH
+    _write_in_triangle_format()
+
     gmsh.finalize()
+
+
+def _write_in_triangle_format() -> None:
+    # get all nodes
+    node_tags, node_coords, _ = gmsh.model.mesh.getNodes()
+    n_nodes = len(node_tags)
+
+    # reshape coordinates (x, y, z for each node)
+    coords = node_coords.reshape((-1, 3))
+
+    # create mapping from gmsh tags to sequential indices
+    tag_to_index = {tag: i + 1 for i, tag in enumerate(node_tags)}
+
+    # get 2D elements (triangles)
+    element_types, element_tags, node_connectivity = (
+        gmsh.model.mesh.getElements(2)
+    )
+
+    # find triangular elements (type 2 in gmsh)
+    triangles = []
+    for i, elem_type in enumerate(element_types):
+        if elem_type == 2:  # 3-node triangle
+            # reshape connectivity for this element type
+            n_nodes_per_elem = 3
+            connectivity = node_connectivity[i].reshape((-1, n_nodes_per_elem))
+            triangles.extend(connectivity.tolist())
+
+    triangles = np.array(triangles, dtype=int)
+    n_triangles = len(triangles)
+
+    # get boundary information
+    # for each node, determine if it's on a boundary
+    boundary_markers = np.zeros(n_nodes, dtype=int)
+
+    # get 1D elements (boundary edges)
+    edge_types, edge_tags, edge_nodes = gmsh.model.mesh.getElements(1)
+
+    boundary_nodes = set()
+    for i, elem_type in enumerate(edge_types):
+        if elem_type == 1:  # 2-node line
+            nodes = edge_nodes[i]
+            boundary_nodes.update(nodes)
+
+    # set boundary markers (1 for boundary nodes, 0 for interior)
+    for i, tag in enumerate(node_tags):
+        if tag in boundary_nodes:
+            boundary_markers[i] = 1
+
+    # write .node file
+    # format: <# of vertices> <dimension (2)> <# of attributes> <boundary markers (0 or 1)>
+    # followed by: <vertex #> <x> <y> [attributes] [boundary marker]
+    with open("mesh.node", "w") as f:
+        f.write(f"{n_nodes} 2 0 1\n")
+        for i in range(n_nodes):
+            # Triangle uses 1-based indexing
+            f.write(
+                f"{i+1} {coords[i,0]:.6f} {coords[i,1]:.6f} "
+                f"{boundary_markers[i]}\n"
+            )
+
+    # write .ele file
+    # format: <# of triangles> <nodes per triangle (3)> <# of attributes>
+    # followed by: <triangle #> <node 1> <node 2> <node 3> [attributes]
+    with open("mesh.ele", "w") as f:
+        f.write(f"{n_triangles} 3 0\n")
+        for i in range(n_triangles):
+            # convert gmsh tags to sequential indices (1-based)
+            nodes = [tag_to_index[tag] for tag in triangles[i]]
+            f.write(f"{i+1} {nodes[0]} {nodes[1]} {nodes[2]}\n")
+
+    print("Created Triangle format files:")
+    print(f"  - mesh.node ({n_nodes} nodes)")
+    print(f"  - mesh.ele ({n_triangles} triangles)")

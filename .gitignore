@@ -7,4 +7,7 @@
 .ruff_cache/
 .venv
 __pycache__/
+mesh.ele
+mesh.msh
+mesh.node
 tags
