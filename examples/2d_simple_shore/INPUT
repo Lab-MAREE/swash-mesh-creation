@@ -61,6 +61,9 @@ POINTS 'GAUGES' FILE 'gauge_positions.txt'
 $ Wave statistics (last 30 minutes by default)
 QUANTITY HSIG SETUP MVEL dur 30 min
 
+$ Wave statistics at gauges
+TABLE 'GAUGES' HEADER 'wave_statistics.txt' HSIG SETUP BRKP
+
 $=============================================================================
 $ RUN
 $=============================================================================
