@@ -342,13 +342,7 @@ class BaieDesBacon:
 
         # Export gauge positions
         gauge_positions = self.create_gauge_positions()
-        np.savetxt(
-            "gauge_positions.txt",
-            gauge_positions,
-            fmt="%.1f",
-            header="x_position y_position",
-            comments="",
-        )
+        np.savetxt("gauge_positions.txt", gauge_positions, fmt="%.1f")
 
         return bathymetry
 

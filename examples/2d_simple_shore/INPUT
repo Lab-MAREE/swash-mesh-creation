@@ -1,7 +1,7 @@
 $ SWASH Input File - 2D Coast Experiment
 $ dev
 
-PROJECT 'WaveChannel' '736'
+PROJECT 'Baie-des-Bacon' '736'
 
 $=============================================================================
 $ MODEL SETUP
@@ -17,17 +17,15 @@ $=============================================================================
 $ COMPUTATIONAL GRID
 $=============================================================================
 
-$ 2D grid: computation start=(25.0m, 25.0m), length=(112.0m, 112.0m), cells=(50, 50), resolution=(2.24m, 2.24m)
-CGRID REGULAR 25.0 25.0 0.0 112.0 112.0 50 50
+CGRID REGULAR 0.0 0.0 0.0 2000.0 1500.0 200 150
 
-$ Vertical layers=2 (equidistant)
 VERTICAL 2
 
 $=============================================================================
 $ BATHYMETRY
 $=============================================================================
 
-INPGRID BOTTOM 25.0 25.0 0. 50 50 2.24 2.24
+INPGRID BOTTOM 0.0 0.0 0. 200 150 10.0 10.0
 READINP BOTTOM 1.0 'bathymetry.txt' IDLA=3 FREE
 
 $=============================================================================
@@ -36,11 +34,12 @@ $=============================================================================
 
 $ Irregular waves with TMA spectrum: Hs=0.5m, Tp=6.0s, cycle=1200.0s
 BOUND SHAPESPEC JONSWAP 3.3 PEAK DSPR POWER
-BOUND EAST BTYPE WEAK CON REG 0.5 6.0 135.0
+BOUND EAST BTYPE WEAK CON REG 0.5 6.0 90.0
 
 $ Sponge layers 
 SPONGELAYER NORTH 10.
 SPONGELAYER WEST 10.
+SPONGELAYER EAST 10.
 
 $=============================================================================
 $ PHYSICS
@@ -61,14 +60,6 @@ POINTS 'GAUGES' FILE 'gauge_positions.txt'
 
 $ Wave statistics (last 30 minutes by default)
 QUANTITY HSIG SETUP MVEL dur 30 min
-
-$ Wave statistics at gauges
-TABLE 'GAUGES' HEADER 'wave_statistics.txt' HSIG SETUP BRKP
-
-$ Timeseries at gauges
-TABLE 'GAUGES' HEADER 'timeseries.txt' &
-  WATL VEL VMAG VDIR VORT &
-  OUTPUT 000000.000 0.1 SEC
 
 $=============================================================================
 $ RUN
