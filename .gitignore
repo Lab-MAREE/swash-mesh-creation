@@ -6,8 +6,12 @@
 .pytest_cache/
 .ruff_cache/
 .venv
+Errfile
+PRINT
 __pycache__/
 mesh.ele
 mesh.msh
 mesh.node
+norm_end
+swashinit
 tags
