@@ -105,34 +105,34 @@ class BaieDesBacon:
         shoreline_points = np.array(
             [
                 # Western approach (deeper water entry)
-                [0, 800],
-                [50, 820],
-                [100, 840],
-                [150, 850],
+                [0, 1050],
+                [50, 1070],
+                [100, 1090],
+                [150, 1100],
                 # Western shore of bay (curved inward)
-                [200, 860],
-                [280, 880],
-                [360, 900],
-                [450, 920],
-                [550, 930],
-                [650, 935],
+                [200, 1110],
+                [280, 1130],
+                [360, 1150],
+                [450, 1170],
+                [550, 1180],
+                [650, 1185],
                 # Head of bay (shallow, curved)
-                [750, 940],
-                [850, 945],
-                [950, 950],
-                [1050, 945],
-                [1150, 940],
-                [1250, 930],
+                [750, 1190],
+                [850, 1195],
+                [950, 1200],
+                [1050, 1195],
+                [1150, 1190],
+                [1250, 1180],
                 # Eastern shore (steeper, more linear)
-                [1350, 915],
-                [1450, 895],
-                [1550, 870],
-                [1650, 840],
-                [1750, 800],
-                [1850, 750],
-                [1950, 690],
+                [1350, 1165],
+                [1450, 1145],
+                [1550, 1120],
+                [1650, 1090],
+                [1750, 1050],
+                [1850, 1000],
+                [1950, 940],
                 # Eastern approach (opening to larger water body)
-                [2000, 620],
+                [2000, 870],
             ]
         )
 
@@ -261,6 +261,9 @@ class BaieDesBacon:
                                 0.5, bathymetry[j, i] - rock_effect
                             )
 
+        # 4. Add breakwaters for wave protection
+        bathymetry = self.add_breakwaters(bathymetry)
+
         # Smooth the bathymetry slightly to remove grid artifacts
         bathymetry = gaussian_filter(bathymetry, sigma=1.0)
 
@@ -314,26 +317,134 @@ class BaieDesBacon:
 
     def create_gauge_positions(self) -> np.ndarray:
         """
-        Create 5 strategic gauge positions for monitoring water levels
+        Create gauge positions for monitoring water levels
+        One gauge at head of bay and two gauges per breakwater (before and after)
 
-        Returns array with shape (5, 2) where columns are [x, y]
+        Returns array with shape (11, 2) where columns are [x, y]
         """
         gauge_positions = np.array(
             [
-                # 1. Deep channel entrance (eastern approach)
-                [1800, 500],
-                # 2. Bay mouth on shallow bar (central entrance)
-                [1000, 600],
-                # 3. Head of bay (shallow area)
-                [1000, 900],
-                # 4. Western shore near rocky area
-                [400, 750],
-                # 5. Central bay (intermediate depth)
-                [1200, 800],
+                # Original gauge 3: Head of bay (shallow area)
+                [1000, 1150],
+                # Left outer breakwater gauges (x=400, y=480)
+                [400, 430],  # Before (seaward)
+                [400, 530],  # After (landward)
+                # Left inner breakwater gauges (x=700, y=500)
+                [700, 450],  # Before (seaward)
+                [700, 550],  # After (landward)
+                # Middle breakwater gauges (x=1000, y=510)
+                [1000, 460],  # Before (seaward)
+                [1000, 560],  # After (landward)
+                # Right inner breakwater gauges (x=1300, y=500)
+                [1300, 450],  # Before (seaward)
+                [1300, 550],  # After (landward)
+                # Right outer breakwater gauges (x=1600, y=480)
+                [1600, 430],  # Before (seaward)
+                [1600, 530],  # After (landward)
             ]
         )
 
         return gauge_positions
+
+    def add_breakwaters(self, bathymetry: np.ndarray) -> np.ndarray:
+        # Define breakwater positions and parameters
+        # Format: (x, y, height, length, width, angle)
+        breakwaters = [
+            # Left outer breakwater
+            (400, 480, 10, 150, 20, 15),
+            # Left inner breakwater
+            (700, 500, 10, 120, 25, 10),
+            # Middle breakwater (lower height)
+            (1000, 510, 8, 100, 20, 0),
+            # Right inner breakwater
+            (1300, 500, 10, 120, 25, -10),
+            # Right outer breakwater
+            (1600, 480, 10, 150, 20, -15),
+        ]
+
+        # Slope ratio (1.75:1 means 1.75 horizontal to 1 vertical)
+        slope_ratio = 1.75
+
+        for (
+            bw_x,
+            bw_y,
+            bw_height,
+            bw_length,
+            bw_width,
+            bw_angle,
+        ) in breakwaters:
+            # Convert angle to radians
+            angle_rad = np.radians(bw_angle)
+
+            # Calculate rotation matrix components
+            cos_a = np.cos(angle_rad)
+            sin_a = np.sin(angle_rad)
+
+            for i in range(len(self.x)):
+                for j in range(len(self.y)):
+                    # Only modify water areas
+                    if bathymetry[j, i] > 0:
+                        # Transform to breakwater local coordinates
+                        dx = self.x[i] - bw_x
+                        dy = self.y[j] - bw_y
+
+                        # Rotate to align with breakwater
+                        local_x = dx * cos_a + dy * sin_a
+                        local_y = -dx * sin_a + dy * cos_a
+
+                        # Check if point is within breakwater footprint
+                        # Using elliptical shape for more natural appearance
+                        if (
+                            abs(local_x)
+                            < bw_length / 2 + bw_height * slope_ratio
+                            and abs(local_y)
+                            < bw_width / 2 + bw_height * slope_ratio
+                        ):
+
+                            # Calculate distance from breakwater center
+                            # Normalize by dimensions
+                            norm_x = local_x / (bw_length / 2)
+                            norm_y = local_y / (bw_width / 2)
+                            norm_dist = np.sqrt(norm_x**2 + norm_y**2)
+
+                            if (
+                                norm_dist
+                                < 1.0 + bw_height * slope_ratio * 2 / bw_length
+                            ):
+                                # Calculate elevation based on distance
+                                # Core region (flat top)
+                                if norm_dist < 0.5:
+                                    elevation = bw_height
+                                else:
+                                    # Sloped region
+                                    # Calculate slope distance
+                                    slope_dist = (
+                                        (norm_dist - 0.5)
+                                        * min(bw_length, bw_width)
+                                        / 2
+                                    )
+
+                                    # Apply slope constraint
+                                    max_elevation = (
+                                        bw_height - slope_dist / slope_ratio
+                                    )
+
+                                    if max_elevation > 0:
+                                        # Smooth transition using exponential decay
+                                        elevation = max_elevation * np.exp(
+                                            -slope_dist
+                                            / (bw_height * slope_ratio)
+                                        )
+                                    else:
+                                        elevation = 0
+
+                                # Reduce water depth by breakwater elevation
+                                # Ensure we don't create negative depths
+                                bathymetry[j, i] = max(
+                                    0.1, bathymetry[j, i] - elevation
+                                )
+
+        return bathymetry
 
     def export_bathymetry_data(self) -> np.ndarray:
         """Export bathymetry and shoreline data"""

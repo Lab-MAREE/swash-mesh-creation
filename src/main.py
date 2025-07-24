@@ -17,8 +17,9 @@ def create_mesh(swash_dir: Path) -> None:
     )
 
     bathymetry, resolution = swash.read_bathymetry(swash_dir)
+    gauge_positions = swash.read_gauge_positions(swash_dir)
 
-    mesh.create_mesh(bathymetry, resolution)
+    mesh.create_mesh(bathymetry, resolution, gauge_positions)
 
 
 def apply_mesh(swash_dir: Path) -> None:

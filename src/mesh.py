@@ -11,6 +11,7 @@ from . import swash
 def create_mesh(
     bathymetry: np.ndarray,
     resolution: tuple[float, float],
+    gauge_positions: np.ndarray,
     *,
     lc_fine: float = 1.0,
     lc_coarse: float = 10.0,
@@ -24,6 +25,7 @@ def create_mesh(
     y_max = (bathymetry.shape[0] - 1) * y_resolution
 
     shoreline = swash.extract_shoreline_boundary(bathymetry, resolution)
+    breakwaters = swash.extract_breakwaters(bathymetry, resolution)
 
     # initialize gmsh
     gmsh.initialize()
@@ -32,7 +34,9 @@ def create_mesh(
 
     # generate mesh in gmsh format
     _generate_mesh(
+        gauge_positions,
         shoreline,
+        breakwaters,
         x_min,
         y_min,
         x_max,
@@ -57,7 +61,9 @@ def create_mesh(
 
 
 def _generate_mesh(
+    gauge_positions: list[tuple[float, float]],
     shoreline: list[tuple[float, float]],
+    breakwaters: list[tuple[float, float]],
     x_min: float,
     y_min: float,
     x_max: float,
@@ -67,7 +73,6 @@ def _generate_mesh(
     lc_coarse: float,
     transition_distance: float,
 ) -> None:
-    # domain corner points
     domain_points = [
         gmsh.model.geo.add_point(x_min, y_min, 0, lc_coarse),
         gmsh.model.geo.add_point(x_min, y_max, 0, lc_coarse),
@@ -87,9 +92,10 @@ def _generate_mesh(
     domain_loop = gmsh.model.geo.add_curve_loop(domain_lines)
     gmsh.model.geo.add_plane_surface([domain_loop])
 
-    # shoreline
-    shore_points = [
-        gmsh.model.geo.add_point(x, y, 0, lc_fine) for x, y in shoreline
+    # specify points of higher resolution
+    finer_points = [
+        gmsh.model.geo.add_point(x, y, 0, lc_fine)
+        for x, y in sorted(set([*shoreline, *breakwaters, *gauge_positions]))
     ]
 
     # synchronize geometry
@@ -97,7 +103,7 @@ def _generate_mesh(
 
     # distance field from shoreline
     gmsh.model.mesh.field.add("Distance", 1)
-    gmsh.model.mesh.field.set_numbers(1, "PointsList", shore_points)
+    gmsh.model.mesh.field.set_numbers(1, "PointsList", finer_points)
 
     # threshold field for mesh size transition
     gmsh.model.mesh.field.add("Threshold", 2)
