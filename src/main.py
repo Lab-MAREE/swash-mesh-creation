@@ -1,3 +1,4 @@
+import shutil
 from pathlib import Path
 
 from . import mesh, swash
@@ -20,10 +21,20 @@ def create_mesh(swash_dir: Path) -> None:
     mesh.create_mesh(bathymetry, resolution)
 
 
-def apply_mesh(
-    mesh_file: Path, input_files: list[Path], *, in_place: bool = False
-) -> None:
-    _verify_file_existence([mesh_file, *input_files])
+def apply_mesh(swash_dir: Path) -> None:
+    _verify_file_existence(
+        [
+            swash_dir / "INPUT",
+            swash_dir / "bathymetry.txt",
+            swash_dir / "mesh.node",
+            swash_dir / "mesh.ele",
+        ]
+    )
+
+    shutil.copy(swash_dir / "INPUT", swash_dir / "INPUT.bkp")
+    shutil.copy(swash_dir / "bathymetry.txt", swash_dir / "bathymetry.txt.bkp")
+
+    swash.apply_mesh_to_input_files(swash_dir)
 
 
 ###########

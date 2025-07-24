@@ -2,6 +2,7 @@ from pathlib import Path
 
 import numpy as np
 import plotly.graph_objects as go
+import scipy.interpolate
 
 from src import utils
 
@@ -145,6 +146,13 @@ def create_diagram(swash_dir: Path) -> go.Figure:
     )
 
 
+def apply_mesh_to_input_files(swash_dir: Path) -> None:
+    bathymetry, resolution = read_bathymetry(swash_dir)
+    bathymetry = _convert_bathymetry(bathymetry, resolution)
+    nodes, node_ids, is_boundary = _read_mesh_nodes(swash_dir)
+    _apply_mesh_to_bathymetry(swash_dir, bathymetry, nodes)
+
+
 ###########
 # private #
 ###########
@@ -177,7 +185,7 @@ def _get_mesh(path: Path) -> tuple[list[float], list[float]]:
                     y_end = float(line_[6])
                     x_cells = int(line_[7])
                     y_cells = int(line_[8])
-                    mesh = _create_rectangular_mesh(
+                    mesh = _get_rectangular_mesh(
                         np.linspace(x_start, x_end, x_cells),
                         np.linspace(y_start, y_end, y_cells),
                     )
@@ -185,7 +193,7 @@ def _get_mesh(path: Path) -> tuple[list[float], list[float]]:
     return mesh
 
 
-def _create_rectangular_mesh(
+def _get_rectangular_mesh(
     x: np.ndarray, y: np.ndarray
 ) -> tuple[list[float | None], list[float | None]]:
     x_edges = [
@@ -219,3 +227,43 @@ def _create_rectangular_mesh(
         ],
     ]
     return x_edges, y_edges
+
+
+def _convert_bathymetry(
+    bathymetry: np.ndarray, resolution: tuple[float, float]
+) -> np.ndarray:
+    x_resolution, y_resolution = resolution
+    return np.array(
+        [
+            [j * x_resolution, i * y_resolution, bathymetry[i, j]]
+            for i in range(bathymetry.shape[0])
+            for j in range(bathymetry.shape[1])
+        ]
+    )
+
+
+def _read_mesh_nodes(
+    swash_dir: Path,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    nodes: list[tuple[float, float]] = []
+    node_ids: list[int] = []
+    is_boundary: list[bool] = []
+    with open(swash_dir / "mesh.node") as f:
+        f.readline()  # skip header
+        for line in f:
+            line_ = line.strip().split()
+            node_ids.append(int(line_[0]))
+            nodes.append((float(line_[1]), float(line_[2])))
+            is_boundary.append(line_[3] == "1")
+    return np.array(nodes), np.array(node_ids), np.array(is_boundary)
+
+
+def _apply_mesh_to_bathymetry(
+    swash_dir: Path, bathymetry: np.ndarray, nodes: np.ndarray
+) -> None:
+    bathymetry = scipy.interpolate.griddata(
+        bathymetry[:, :2], bathymetry[:, 2], nodes
+    )
+    with open("bathymetry.txt", "w") as f:
+        for val in bathymetry:
+            f.write(f"{val:.3f}\n")

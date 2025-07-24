@@ -1,3 +1,4 @@
+*.bkp
 .cache
 .coverage*
 .env
@@ -15,3 +16,4 @@ mesh.node
 norm_end
 swashinit
 tags
+wave_statistics.txt

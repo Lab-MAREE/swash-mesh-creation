@@ -35,12 +35,12 @@ $=============================================================================
 
 $ Assuming: marker 1=east, 2=north, 3=west, 4=south
 
-$BOUND SHAPESPEC JONSWAP 3.3 PEAK DSPR POWER
-$BOUND SIDE 3 CCW BTYPE WEAK CON REG 0.5 6.0 90.0
-$
-$SPONGELAYER 1 10.
-$SPONGELAYER 2 10.
-$SPONGELAYER 3 10.
+BOUND SHAPESPEC JONSWAP 3.3 PEAK DSPR POWER
+BOUND SIDE 3 CCW BTYPE WEAK CON REG 0.5 6.0 90.0
+
+SPONGELAYER 1 10.
+SPONGELAYER 2 10.
+SPONGELAYER 3 10.
 
 $=============================================================================
 $ PHYSICS

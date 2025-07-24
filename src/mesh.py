@@ -16,6 +16,15 @@ def create_mesh(
     lc_coarse: float = 10.0,
     transition_distance: float = 50.0,
 ) -> None:
+    x_resolution, y_resolution = resolution
+
+    x_min = 0
+    y_min = 0
+    x_max = (bathymetry.shape[1] - 1) * x_resolution
+    y_max = (bathymetry.shape[0] - 1) * y_resolution
+
+    shoreline = swash.extract_shoreline_boundary(bathymetry, resolution)
+
     # initialize gmsh
     gmsh.initialize()
     gmsh.clear()
@@ -23,15 +32,23 @@ def create_mesh(
 
     # generate mesh in gmsh format
     _generate_mesh(
-        bathymetry,
-        resolution,
+        shoreline,
+        x_min,
+        y_min,
+        x_max,
+        y_max,
         lc_fine=lc_fine,
         lc_coarse=lc_coarse,
         transition_distance=transition_distance,
     )
 
     # write mesh in format understandable by swash
-    _write_mesh()
+    _write_mesh(
+        x_min,
+        y_min,
+        x_max,
+        y_max,
+    )
 
 
 ###########
@@ -40,22 +57,16 @@ def create_mesh(
 
 
 def _generate_mesh(
-    bathymetry: np.ndarray,
-    resolution: tuple[float, float],
+    shoreline: list[tuple[float, float]],
+    x_min: float,
+    y_min: float,
+    x_max: float,
+    y_max: float,
     *,
     lc_fine: float,
     lc_coarse: float,
     transition_distance: float,
 ) -> None:
-    x_resolution, y_resolution = resolution
-
-    shoreline = swash.extract_shoreline_boundary(bathymetry, resolution)
-
-    x_min = 0
-    y_min = 0
-    x_max = (bathymetry.shape[1] - 1) * x_resolution
-    y_max = (bathymetry.shape[0] - 1) * y_resolution
-
     # domain corner points
     domain_points = [
         gmsh.model.geo.add_point(x_min, y_min, 0, lc_coarse),
@@ -111,19 +122,23 @@ def _generate_mesh(
     gmsh.model.mesh.optimize("Netgen")
 
 
-def _write_mesh() -> None:
+def _write_mesh(
+    x_min: float, y_min: float, x_max: float, y_max: float
+) -> None:
     # write mesh in gmsh format for reference
     gmsh.write("mesh.msh")
 
     # convert to Triangle format for SWASH
-    _write_in_triangle_format()
+    _write_in_triangle_format(x_min, y_min, x_max, y_max)
 
     gmsh.finalize()
 
 
-def _write_in_triangle_format() -> None:
+def _write_in_triangle_format(
+    x_min: float, y_min: float, x_max: float, y_max: float
+) -> None:
     # get all nodes
-    node_tags, node_coords, _ = gmsh.model.mesh.getNodes()
+    node_tags, node_coords, _ = gmsh.model.mesh.get_nodes()
     n_nodes = len(node_tags)
 
     # reshape coordinates (x, y, z for each node)
@@ -131,10 +146,11 @@ def _write_in_triangle_format() -> None:
 
     # create mapping from gmsh tags to sequential indices
     tag_to_index = {tag: i + 1 for i, tag in enumerate(node_tags)}
+    index_to_coords = {i + 1: coords[i] for i in range(n_nodes)}
 
     # get 2D elements (triangles)
     element_types, element_tags, node_connectivity = (
-        gmsh.model.mesh.getElements(2)
+        gmsh.model.mesh.get_elements(2)
     )
 
     # find triangular elements (type 2 in gmsh)
@@ -149,46 +165,80 @@ def _write_in_triangle_format() -> None:
     triangles = np.array(triangles, dtype=int)
     n_triangles = len(triangles)
 
-    # get boundary information
-    # for each node, determine if it's on a boundary
+    # determine boundary markers based on position
     boundary_markers = np.zeros(n_nodes, dtype=int)
 
-    # get 1D elements (boundary edges)
-    edge_types, edge_tags, edge_nodes = gmsh.model.mesh.getElements(1)
+    # tolerance for boundary detection
+    tol = 1e-6
 
-    boundary_nodes = set()
-    for i, elem_type in enumerate(edge_types):
-        if elem_type == 1:  # 2-node line
-            nodes = edge_nodes[i]
-            boundary_nodes.update(nodes)
-
-    # set boundary markers (1 for boundary nodes, 0 for interior)
     for i, tag in enumerate(node_tags):
-        if tag in boundary_nodes:
-            boundary_markers[i] = 1
+        x, y = coords[i, 0], coords[i, 1]
+
+        # Check each boundary separately and assign markers
+        if abs(x - x_min) < tol:
+            boundary_markers[i] = 1  # west
+        elif abs(x - x_max) < tol:
+            boundary_markers[i] = 3  # east
+        elif abs(y - y_min) < tol:
+            boundary_markers[i] = 4  # south
+        elif abs(y - y_max) < tol:
+            boundary_markers[i] = 2  # north
 
     # write .node file
-    # format: <# of vertices> <dimension (2)> <# of attributes> <boundary markers (0 or 1)>
-    # followed by: <vertex #> <x> <y> [attributes] [boundary marker]
     with open("mesh.node", "w") as f:
+        # Header: number_of_vertices dimension attributes boundary_markers
         f.write(f"{n_nodes} 2 0 1\n")
         for i in range(n_nodes):
-            # Triangle uses 1-based indexing
             f.write(
                 f"{i+1} {coords[i,0]:.6f} {coords[i,1]:.6f} "
                 f"{boundary_markers[i]}\n"
             )
 
+    # ensure triangles are counterclockwise
+    ccw_triangles = []
+    for tri in triangles:
+        # convert gmsh tags to sequential indices
+        idx1 = tag_to_index[tri[0]]
+        idx2 = tag_to_index[tri[1]]
+        idx3 = tag_to_index[tri[2]]
+
+        # get vertices coordinates
+        v0 = index_to_coords[idx1]
+        v1 = index_to_coords[idx2]
+        v2 = index_to_coords[idx3]
+
+        # calculate signed area
+        area = 0.5 * (
+            (v1[0] - v0[0]) * (v2[1] - v0[1])
+            - (v2[0] - v0[0]) * (v1[1] - v0[1])
+        )
+
+        if area > 0:
+            # already counterclockwise
+            ccw_triangles.append([idx1, idx2, idx3])
+        else:
+            # swap to make counterclockwise
+            ccw_triangles.append([idx1, idx3, idx2])
+
     # write .ele file
-    # format: <# of triangles> <nodes per triangle (3)> <# of attributes>
-    # followed by: <triangle #> <node 1> <node 2> <node 3> [attributes]
     with open("mesh.ele", "w") as f:
+        # Header: number_of_triangles nodes_per_triangle attributes
         f.write(f"{n_triangles} 3 0\n")
-        for i in range(n_triangles):
-            # convert gmsh tags to sequential indices (1-based)
-            nodes = [tag_to_index[tag] for tag in triangles[i]]
-            f.write(f"{i+1} {nodes[0]} {nodes[1]} {nodes[2]}\n")
+        for i, tri in enumerate(ccw_triangles):
+            f.write(f"{i+1} {tri[0]} {tri[1]} {tri[2]}\n")
 
     print("Created Triangle format files:")
     print(f"  - mesh.node ({n_nodes} nodes)")
     print(f"  - mesh.ele ({n_triangles} triangles)")
+
+    # Print boundary statistics
+    unique, counts = np.unique(boundary_markers, return_counts=True)
+    print("\nBoundary marker distribution:")
+    for marker, count in zip(unique, counts):
+        if marker == 0:
+            print(f"  Interior nodes: {count}")
+        else:
+            sides = {1: "West", 2: "North", 3: "East", 4: "South"}
+            print(
+                f"  {sides.get(marker, 'Unknown')} boundary (marker {marker}): {count} nodes"
+            )

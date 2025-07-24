@@ -55,16 +55,9 @@ def _create_mesh(
 
 
 def _apply_mesh(
-    mesh_file: str = typer.Argument(..., help="Mesh file"),
-    input_files: list[str] = typer.Argument(
+    swash_dir: str = typer.Argument(
         ...,
-        help="Input files to apply the mesh to (can be the INPUT file, gauge positions file or other cgrid files)",
-    ),
-    in_place: bool = typer.Option(
-        False,
-        help="If the files should be directly modified or if a copy in the format `mesh_{file}` should be created.",
+        help="Directory containing the swash input files (INPUT, bathymetry.txt and gauge_positions.txt)",
     ),
 ) -> None:
-    mesh_file_ = Path(mesh_file)
-    input_files_ = [Path(file) for file in input_files]
-    main.apply_mesh(mesh_file_, input_files_, in_place=in_place)
+    main.apply_mesh(Path(swash_dir))
