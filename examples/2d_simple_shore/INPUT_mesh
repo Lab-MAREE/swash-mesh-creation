@@ -33,7 +33,7 @@ $=============================================================================
 $ WAVE GENERATION
 $=============================================================================
 
-$ Assuming: marker 1=east, 2=north, 3=west, 4=south
+$ Assuming: marker 1=west, 2=north, 3=east, 4=south
 
 BOUND SHAPESPEC JONSWAP 3.3 PEAK DSPR POWER
 BOUND SIDE 3 CCW BTYPE WEAK CON REG 0.5 6.0 90.0
