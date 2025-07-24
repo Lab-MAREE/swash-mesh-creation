@@ -57,28 +57,28 @@ def extract_breakwaters(
     x_resolution, y_resolution = resolution
 
     points: list[tuple[float, float]] = []
-    
+
     # Calculate gradients in both directions
     grad_y, grad_x = np.gradient(bathymetry)
-    
+
     # Calculate gradient magnitude and angle
     grad_magnitude = np.sqrt(grad_x**2 + grad_y**2)
-    
+
     # Calculate second derivatives to detect gradient changes
     grad2_yy, grad2_yx = np.gradient(grad_y)
     grad2_xy, grad2_xx = np.gradient(grad_x)
-    
+
     # Detect significant gradient changes (curvature)
     # Breakwaters have high curvature where slope changes rapidly
     curvature = np.abs(grad2_xx) + np.abs(grad2_yy)
-    
+
     # Find local maxima in bathymetry (elevated regions)
     rows, cols = bathymetry.shape
-    
+
     # Threshold for significant gradient change
     grad_threshold = np.percentile(grad_magnitude[grad_magnitude > 0], 75)
     curv_threshold = np.percentile(curvature[curvature > 0], 80)
-    
+
     # First, find key breakwater points
     key_points = []
     for j in range(2, rows - 2):
@@ -90,51 +90,53 @@ def extract_breakwaters(
                     # Check if this is an elevated region
                     center_val = bathymetry[j, i]
                     # Look at a 3x3 neighborhood
-                    neighborhood = bathymetry[j-1:j+2, i-1:i+2]
-                    neighbors_avg = (
-                        np.sum(neighborhood) - center_val
-                    ) / 8
-                    
+                    neighborhood = bathymetry[j - 1 : j + 2, i - 1 : i + 2]
+                    neighbors_avg = (np.sum(neighborhood) - center_val) / 8
+
                     # Check if elevated compared to neighbors
                     if center_val > neighbors_avg + 0.1:  # reduced threshold
                         # Additional check: is this part of a ridge structure?
                         # Check if gradients change sign in nearby points
                         grad_changes_x = (
-                            (grad_x[j, i-1] * grad_x[j, i+1] < 0) or
-                            (grad_x[j, i-2:i+3].max() * 
-                             grad_x[j, i-2:i+3].min() < 0)
+                            grad_x[j, i - 1] * grad_x[j, i + 1] < 0
+                        ) or (
+                            grad_x[j, i - 2 : i + 3].max()
+                            * grad_x[j, i - 2 : i + 3].min()
+                            < 0
                         )
                         grad_changes_y = (
-                            (grad_y[j-1, i] * grad_y[j+1, i] < 0) or
-                            (grad_y[j-2:j+3, i].max() * 
-                             grad_y[j-2:j+3, i].min() < 0)
+                            grad_y[j - 1, i] * grad_y[j + 1, i] < 0
+                        ) or (
+                            grad_y[j - 2 : j + 3, i].max()
+                            * grad_y[j - 2 : j + 3, i].min()
+                            < 0
                         )
-                        
+
                         # If gradient changes sign in either direction
                         if grad_changes_x or grad_changes_y:
                             key_points.append((i, j))
-    
+
     # Create a mask for all breakwater points
     breakwater_mask = np.zeros_like(bathymetry, dtype=bool)
-    
+
     # Mark all key points
     for i, j in key_points:
         breakwater_mask[j, i] = True
-    
+
     # Find all points between key points
     # Group points by row and column
     rows_with_points = {}
     cols_with_points = {}
-    
+
     for i, j in key_points:
         if j not in rows_with_points:
             rows_with_points[j] = []
         rows_with_points[j].append(i)
-        
+
         if i not in cols_with_points:
             cols_with_points[i] = []
         cols_with_points[i].append(j)
-    
+
     # Fill in points between key points in rows
     for j, i_values in rows_with_points.items():
         i_values = sorted(i_values)
@@ -144,7 +146,7 @@ def extract_breakwaters(
             if i_end - i_start < 10:  # reasonable distance
                 for i in range(i_start, i_end + 1):
                     breakwater_mask[j, i] = True
-    
+
     # Fill in points between key points in columns
     for i, j_values in cols_with_points.items():
         j_values = sorted(j_values)
@@ -154,7 +156,7 @@ def extract_breakwaters(
             if j_end - j_start < 10:  # reasonable distance
                 for j in range(j_start, j_end + 1):
                     breakwater_mask[j, i] = True
-    
+
     # Also connect diagonally adjacent key points
     for idx1, (i1, j1) in enumerate(key_points):
         for idx2 in range(idx1 + 1, len(key_points)):
@@ -169,13 +171,13 @@ def extract_breakwaters(
                         # Check if this point is elevated enough
                         if bathymetry[j, i] > 14.5:  # threshold
                             breakwater_mask[j, i] = True
-    
+
     # Convert mask to list of points
     for j in range(rows):
         for i in range(cols):
             if breakwater_mask[j, i]:
                 points.append((i * x_resolution, j * y_resolution))
-    
+
     return points
 
 
@@ -286,7 +288,7 @@ def create_diagram(swash_dir: Path) -> go.Figure:
 def apply_mesh_to_input_files(swash_dir: Path) -> None:
     bathymetry, resolution = read_bathymetry(swash_dir)
     bathymetry = _convert_bathymetry(bathymetry, resolution)
-    nodes, node_ids, is_boundary = _read_mesh_nodes(swash_dir)
+    nodes, node_ids = _read_mesh_nodes(swash_dir)
     _apply_mesh_to_bathymetry(swash_dir, bathymetry, nodes)
 
 
@@ -381,18 +383,16 @@ def _convert_bathymetry(
 
 def _read_mesh_nodes(
     swash_dir: Path,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray]:
     nodes: list[tuple[float, float]] = []
     node_ids: list[int] = []
-    is_boundary: list[bool] = []
     with open(swash_dir / "mesh.node") as f:
         f.readline()  # skip header
         for line in f:
             line_ = line.strip().split()
             node_ids.append(int(line_[0]))
             nodes.append((float(line_[1]), float(line_[2])))
-            is_boundary.append(line_[3] == "1")
-    return np.array(nodes), np.array(node_ids), np.array(is_boundary)
+    return np.array(nodes), np.array(node_ids)
 
 
 def _apply_mesh_to_bathymetry(

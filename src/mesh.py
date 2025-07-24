@@ -157,16 +157,16 @@ def _write_mesh(
 def _write_in_triangle_format(
     x_min: float, y_min: float, x_max: float, y_max: float
 ) -> None:
+    print("Converting to triangle format")
+
     # get all nodes
-    node_tags, node_coords, _ = gmsh.model.mesh.get_nodes()
-    n_nodes = len(node_tags)
+    node_ids, nodes, _ = gmsh.model.mesh.get_nodes()
 
-    # reshape coordinates (x, y, z for each node)
-    coords = node_coords.reshape((-1, 3))
+    # reshape coordinates (x, y, z for each node) and drop z that's always 0
+    nodes = nodes.reshape(-1, 3)[:, :2]
+    n_nodes = len(node_ids)
 
-    # create mapping from gmsh tags to sequential indices
-    tag_to_index = {tag: i + 1 for i, tag in enumerate(node_tags)}
-    index_to_coords = {i + 1: coords[i] for i in range(n_nodes)}
+    id_to_idx = {id: i for i, id in enumerate(node_ids)}
 
     # get 2D elements (triangles)
     element_types, element_tags, node_connectivity = (
@@ -185,47 +185,45 @@ def _write_in_triangle_format(
     triangles = np.array(triangles, dtype=int)
     n_triangles = len(triangles)
 
-    # determine boundary markers based on position
-    boundary_markers = np.zeros(n_nodes, dtype=int)
-
-    # tolerance for boundary detection
     tol = 1e-6
+    # 1: west, 2: north, 3: east, 4: south
+    boundaries = [
+        (
+            1
+            if abs(x - x_min) < tol
+            else (
+                2
+                if abs(y_max - y) < tol
+                else (
+                    3
+                    if abs(x_max - x) < tol
+                    else 4 if abs(y - y_min) < tol else 0
+                )
+            )
+        )
+        for x, y in nodes
+    ]
 
-    for i, tag in enumerate(node_tags):
-        x, y = coords[i, 0], coords[i, 1]
-
-        # Check each boundary separately and assign markers
-        if abs(x - x_min) < tol:
-            boundary_markers[i] = 1  # west
-        elif abs(x - x_max) < tol:
-            boundary_markers[i] = 3  # east
-        elif abs(y - y_min) < tol:
-            boundary_markers[i] = 4  # south
-        elif abs(y - y_max) < tol:
-            boundary_markers[i] = 2  # north
-
-    # write .node file
     with open("mesh.node", "w") as f:
         # Header: number_of_vertices dimension attributes boundary_markers
         f.write(f"{n_nodes} 2 0 1\n")
         for i in range(n_nodes):
             f.write(
-                f"{i+1} {coords[i,0]:.6f} {coords[i,1]:.6f} "
-                f"{boundary_markers[i]}\n"
+                f"{i+1} {nodes[i,0]:.6f} {nodes[i,1]:.6f} {boundaries[i]}\n"
             )
 
     # ensure triangles are counterclockwise
     ccw_triangles = []
     for tri in triangles:
         # convert gmsh tags to sequential indices
-        idx1 = tag_to_index[tri[0]]
-        idx2 = tag_to_index[tri[1]]
-        idx3 = tag_to_index[tri[2]]
+        idx1 = id_to_idx[tri[0]]
+        idx2 = id_to_idx[tri[1]]
+        idx3 = id_to_idx[tri[2]]
 
         # get vertices coordinates
-        v0 = index_to_coords[idx1]
-        v1 = index_to_coords[idx2]
-        v2 = index_to_coords[idx3]
+        v0 = nodes[idx1]
+        v1 = nodes[idx2]
+        v2 = nodes[idx3]
 
         # calculate signed area
         area = 0.5 * (
@@ -240,25 +238,21 @@ def _write_in_triangle_format(
             # swap to make counterclockwise
             ccw_triangles.append([idx1, idx3, idx2])
 
-    # write .ele file
     with open("mesh.ele", "w") as f:
         # Header: number_of_triangles nodes_per_triangle attributes
         f.write(f"{n_triangles} 3 0\n")
         for i, tri in enumerate(ccw_triangles):
             f.write(f"{i+1} {tri[0]} {tri[1]} {tri[2]}\n")
 
+    with open("mesh.edge", "w") as f:
+        # Header: number_of_edges boundary_markers
+        f.write("4 1\n")
+        # first four nodes are corners SW, NW, NE, SE
+        f.write("1 1 2\n")
+        f.write("2 2 3\n")
+        f.write("3 3 4\n")
+        f.write("4 4 1\n")
+
     print("Created Triangle format files:")
     print(f"  - mesh.node ({n_nodes} nodes)")
     print(f"  - mesh.ele ({n_triangles} triangles)")
-
-    # Print boundary statistics
-    unique, counts = np.unique(boundary_markers, return_counts=True)
-    print("\nBoundary marker distribution:")
-    for marker, count in zip(unique, counts):
-        if marker == 0:
-            print(f"  Interior nodes: {count}")
-        else:
-            sides = {1: "West", 2: "North", 3: "East", 4: "South"}
-            print(
-                f"  {sides.get(marker, 'Unknown')} boundary (marker {marker}): {count} nodes"
-            )

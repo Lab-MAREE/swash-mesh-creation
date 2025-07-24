@@ -10,6 +10,7 @@
 Errfile
 PRINT
 __pycache__/
+mesh.edge
 mesh.ele
 mesh.msh
 mesh.node
