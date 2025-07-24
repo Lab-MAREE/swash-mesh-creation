@@ -93,9 +93,22 @@ def _generate_mesh(
     gmsh.model.geo.add_plane_surface([domain_loop])
 
     # specify points of higher resolution
+    shoreline_points = [
+        gmsh.model.geo.add_point(x, y, 0, lc_fine) for x, y in shoreline
+    ]
     finer_points = [
         gmsh.model.geo.add_point(x, y, 0, lc_fine)
-        for x, y in sorted(set([*shoreline, *breakwaters, *gauge_positions]))
+        for x, y in sorted(
+            set([*breakwaters, *gauge_positions]) - set(shoreline)
+        )
+    ]
+
+    # lines for the shoreline
+    finer_lines = [
+        gmsh.model.geo.add_line(point_1, point_2)
+        for point_1, point_2 in zip(
+            shoreline_points[:-1], shoreline_points[1:], strict=True
+        )
     ]
 
     # synchronize geometry
@@ -104,6 +117,7 @@ def _generate_mesh(
     # distance field from shoreline
     gmsh.model.mesh.field.add("Distance", 1)
     gmsh.model.mesh.field.set_numbers(1, "PointsList", finer_points)
+    gmsh.model.mesh.field.set_numbers(1, "CurvesList", finer_lines)
 
     # threshold field for mesh size transition
     gmsh.model.mesh.field.add("Threshold", 2)
