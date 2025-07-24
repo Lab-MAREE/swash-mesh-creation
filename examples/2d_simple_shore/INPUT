@@ -17,30 +17,29 @@ $=============================================================================
 $ COMPUTATIONAL GRID
 $=============================================================================
 
-VERTICAL 2
+CGRID REGULAR 0.0 0.0 0.0 2000.0 1500.0 200 150
 
-CGRID UNSTRUCTURED
-READGRID UNSTRUC TRIANGLE 'mesh'
+VERTICAL 2
 
 $=============================================================================
 $ BATHYMETRY
 $=============================================================================
 
-INPGRID BOTTOM UNSTRUCTURED
-READINP BOTTOM 1.0 'bathymetry.txt' FREE
+INPGRID BOTTOM 0.0 0.0 0. 200 150 10.0 10.0
+READINP BOTTOM 1.0 'bathymetry.txt' IDLA=3 FREE
 
 $=============================================================================
 $ WAVE GENERATION
 $=============================================================================
 
-$ Assuming: marker 1=east, 2=north, 3=west, 4=south
+$ Irregular waves with TMA spectrum: Hs=0.5m, Tp=6.0s, cycle=1200.0s
+BOUND SHAPESPEC JONSWAP 3.3 PEAK DSPR POWER
+BOUND EAST BTYPE WEAK CON REG 0.5 6.0 90.0
 
-$BOUND SHAPESPEC JONSWAP 3.3 PEAK DSPR POWER
-$BOUND SIDE 3 CCW BTYPE WEAK CON REG 0.5 6.0 90.0
-$
-$SPONGELAYER 1 10.
-$SPONGELAYER 2 10.
-$SPONGELAYER 3 10.
+$ Sponge layers 
+SPONGELAYER NORTH 10.
+SPONGELAYER WEST 10.
+SPONGELAYER EAST 10.
 
 $=============================================================================
 $ PHYSICS
