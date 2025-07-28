@@ -48,13 +48,16 @@ The package follows a clean separation between CLI interface and core functional
 
 - **src/cli.py**: Typer-based CLI with `create`/`c` and `apply`/`a` commands for mesh creation and application
 - **src/main.py**: Core business logic with `create_mesh()` and `apply_mesh()` functions
-- **src/__init__.py**: Package interface exposing main functions
-- **examples/**: Sample SWASH configurations including 1D wave channel setup
+- **src/mesh.py**: Mesh generation using gmsh with adaptive refinement near shorelines and gauges
+- **src/swash.py**: SWASH file handling including bathymetry parsing and INPUT file modification
+- **src/utils/**: Plotting utilities for visualization with plotly
 
-### Current Implementation Status
-- CLI framework complete with proper argument handling and help text
-- Core functions implemented with file validation but mesh generation logic pending
-- Ready for gmsh integration and SWASH file parsing implementation
+### Key Technical Details
+- Mesh refinement uses distance fields from shoreline boundaries and specified gauge positions
+- Exports to Triangle format (.node, .ele, .edge files) for SWASH compatibility
+- Boundary numbering convention: West=1, North=2, East=3, South=4
+- Bathymetry interpolation to mesh nodes using scipy.interpolate.RBFInterpolator
+- Automatic detection of breakwaters from bathymetry gradients
 
 ## Code Style
 
@@ -68,13 +71,18 @@ The package follows a clean separation between CLI interface and core functional
 
 - Always run code quality tools (`black`, `isort`, `ruff`, `ty check`) after modifying files
 - Ensure strings and docstrings are split to respect the 79 character line length maximum
-- No test suite exists yet - tests should be created in `tests/` directory following pytest conventions
+- Test coverage should be maintained for new functionality
 
 ## Key Dependencies
 
 - **gmsh**: Core mesh generation library for creating unstructured meshes from bathymetry data
+- **numpy**: Numerical operations for bathymetry and coordinate handling
 - **typer**: Modern CLI framework providing the command interface
+- **plotly**: Visualization of bathymetry, gauges, and mesh structures
+- **scipy**: Interpolation utilities for mapping bathymetry to mesh nodes
 
 ## Testing Principles
 
 - Never mock anything. Always use simple reusable fixtures.
+- Test files follow the same structure as source files in tests/ directory
+- Integration tests should use the examples/ directory data
