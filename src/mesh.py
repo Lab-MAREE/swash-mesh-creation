@@ -1,3 +1,10 @@
+"""
+Fixed version of mesh.py focusing on the core issues:
+1. Correct node ID mapping in triangles
+2. Remove unnecessary edge file generation (not needed for SWASH)
+3. Ensure proper triangle orientation
+"""
+
 import gmsh
 import numpy as np
 
@@ -11,9 +18,9 @@ from . import swash
 def create_mesh(
     bathymetry: np.ndarray,
     resolution: tuple[float, float],
-    gauge_positions: np.ndarray,
+    gauge_positions: list[tuple[float, float]],
     *,
-    lc_fine: float = 1.0,
+    lc_fine: float = 5.0,
     lc_coarse: float = 10.0,
     transition_distance: float = 50.0,
 ) -> None:
@@ -131,9 +138,10 @@ def _generate_mesh(
     gmsh.model.mesh.field.set_as_background_mesh(2)
 
     # meshing options
-    gmsh.option.setNumber("Mesh.Algorithm", 6)  # frontal-delaunay
+    gmsh.option.setNumber("Mesh.Algorithm", 5)  # Delaunay
     gmsh.option.setNumber("Mesh.RecombineAll", 0)  # triangular mesh
-    gmsh.option.setNumber("Mesh.Smoothing", 5)  # smooth the mesh
+    gmsh.option.setNumber("Mesh.Smoothing", 10)  # smooth the mesh
+    gmsh.option.setNumber("Mesh.AnisoMax", 1.0)  # limit anisotropy
 
     # generate mesh
     gmsh.model.mesh.generate(2)
@@ -145,12 +153,8 @@ def _generate_mesh(
 def _write_mesh(
     x_min: float, y_min: float, x_max: float, y_max: float
 ) -> None:
-    # write mesh in gmsh format for reference
     gmsh.write("mesh.msh")
-
-    # convert to Triangle format for SWASH
     _write_in_triangle_format(x_min, y_min, x_max, y_max)
-
     gmsh.finalize()
 
 
@@ -159,100 +163,76 @@ def _write_in_triangle_format(
 ) -> None:
     print("Converting to triangle format")
 
-    # get all nodes
-    node_ids, nodes, _ = gmsh.model.mesh.get_nodes()
+    # Get all nodes from gmsh
+    node_tags, node_coords, _ = gmsh.model.mesh.get_nodes()
+    node_coords = node_coords.reshape(-1, 3)[:, :2]  # Drop z coordinate
 
-    # reshape coordinates (x, y, z for each node) and drop z that's always 0
-    nodes = nodes.reshape(-1, 3)[:, :2]
-    n_nodes = len(node_ids)
+    # Create mapping from gmsh node tags to 1-based indices for output
+    gmsh_to_output = {tag: idx + 1 for idx, tag in enumerate(node_tags)}
 
-    id_to_idx = {id: i for i, id in enumerate(node_ids)}
+    # Determine boundary markers for nodes
+    tolerance = 1e-10
+    boundary_markers = []
 
-    # get 2D elements (triangles)
-    element_types, element_tags, node_connectivity = (
-        gmsh.model.mesh.get_elements(2)
-    )
-
-    # find triangular elements (type 2 in gmsh)
-    triangles = []
-    for i, elem_type in enumerate(element_types):
-        if elem_type == 2:  # 3-node triangle
-            # reshape connectivity for this element type
-            n_nodes_per_elem = 3
-            connectivity = node_connectivity[i].reshape((-1, n_nodes_per_elem))
-            triangles.extend(connectivity.tolist())
-
-    triangles = np.array(triangles, dtype=int)
-    n_triangles = len(triangles)
-
-    tol = 1e-6
-    # 1: west, 2: north, 3: east, 4: south
-    boundaries = [
-        (
-            1
-            if abs(x - x_min) < tol
-            else (
-                2
-                if abs(y_max - y) < tol
-                else (
-                    3
-                    if abs(x_max - x) < tol
-                    else 4 if abs(y - y_min) < tol else 0
-                )
-            )
-        )
-        for x, y in nodes
-    ]
-
-    with open("mesh.node", "w") as f:
-        # Header: number_of_vertices dimension attributes boundary_markers
-        f.write(f"{n_nodes} 2 0 1\n")
-        for i in range(n_nodes):
-            f.write(
-                f"{i+1} {nodes[i,0]:.6f} {nodes[i,1]:.6f} {boundaries[i]}\n"
-            )
-
-    # ensure triangles are counterclockwise
-    ccw_triangles = []
-    for tri in triangles:
-        # convert gmsh tags to sequential indices
-        idx1 = id_to_idx[tri[0]]
-        idx2 = id_to_idx[tri[1]]
-        idx3 = id_to_idx[tri[2]]
-
-        # get vertices coordinates
-        v0 = nodes[idx1]
-        v1 = nodes[idx2]
-        v2 = nodes[idx3]
-
-        # calculate signed area
-        area = 0.5 * (
-            (v1[0] - v0[0]) * (v2[1] - v0[1])
-            - (v2[0] - v0[0]) * (v1[1] - v0[1])
-        )
-
-        if area > 0:
-            # already counterclockwise
-            ccw_triangles.append([idx1, idx2, idx3])
+    for x, y in node_coords:
+        if abs(x - x_min) < tolerance:
+            marker = 1  # West
+        elif abs(x - x_max) < tolerance:
+            marker = 3  # East
+        elif abs(y - y_min) < tolerance:
+            marker = 4  # South
+        elif abs(y - y_max) < tolerance:
+            marker = 2  # North
         else:
-            # swap to make counterclockwise
-            ccw_triangles.append([idx1, idx3, idx2])
+            marker = 0  # Interior
+        boundary_markers.append(marker)
 
+    # Write node file
+    with open("mesh.node", "w") as f:
+        f.write(f"{len(node_tags)} 2 0 1\n")
+        for i, ((x, y), marker) in enumerate(
+            zip(node_coords, boundary_markers)
+        ):
+            f.write(f"{i+1} {x:.10e} {y:.10e} {marker}\n")
+
+    # Get triangles from gmsh
+    elem_types, elem_tags, elem_node_tags = gmsh.model.mesh.get_elements(2)
+
+    triangles = []
+    for elem_type, node_tags in zip(elem_types, elem_node_tags):
+        if elem_type == 2:  # Triangular elements
+            # Process triangles in groups of 3 nodes
+            for i in range(0, len(node_tags), 3):
+                # Get gmsh node tags for this triangle
+                gmsh_n1 = node_tags[i]
+                gmsh_n2 = node_tags[i + 1]
+                gmsh_n3 = node_tags[i + 2]
+
+                # Convert to output node numbers
+                n1 = gmsh_to_output[gmsh_n1]
+                n2 = gmsh_to_output[gmsh_n2]
+                n3 = gmsh_to_output[gmsh_n3]
+
+                # Get coordinates for orientation check
+                x1, y1 = node_coords[n1 - 1]
+                x2, y2 = node_coords[n2 - 1]
+                x3, y3 = node_coords[n3 - 1]
+
+                # Check orientation (positive area = counter-clockwise)
+                area = 0.5 * ((x2 - x1) * (y3 - y1) - (x3 - x1) * (y2 - y1))
+
+                if area > 0:
+                    triangles.append((n1, n2, n3))
+                else:
+                    # Swap to make counter-clockwise
+                    triangles.append((n1, n3, n2))
+
+    # Write element file
     with open("mesh.ele", "w") as f:
-        # Header: number_of_triangles nodes_per_triangle attributes
-        f.write(f"{n_triangles} 3 0\n")
-        for i, tri in enumerate(ccw_triangles):
-            f.write(f"{i+1} {tri[0]} {tri[1]} {tri[2]}\n")
-
-    with open("mesh.edge", "w") as f:
-        # Header: number_of_edges boundary_markers
-        f.write("4 1\n")
-        # first four nodes are corners SW, NW, NE, SE
-        f.write("1 1 2\n")
-        f.write("2 2 3\n")
-        f.write("3 3 4\n")
-        f.write("4 4 1\n")
+        f.write(f"{len(triangles)} 3 0\n")
+        for i, (n1, n2, n3) in enumerate(triangles):
+            f.write(f"{i+1} {n1} {n2} {n3}\n")
 
     print("Created Triangle format files:")
-    print(f"  - mesh.node ({n_nodes} nodes)")
-    print(f"  - mesh.ele ({n_triangles} triangles)")
+    print(f"  - mesh.node ({len(node_tags)} nodes)")
+    print(f"  - mesh.ele ({len(triangles)} triangles)")
