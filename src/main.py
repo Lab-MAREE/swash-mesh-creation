@@ -16,10 +16,12 @@ def create_mesh(swash_dir: Path) -> None:
         ]
     )
 
-    bathymetry, resolution = swash.read_bathymetry(swash_dir)
+    bathymetry, porosity, resolution = swash.read_bathymetry(swash_dir)
     gauge_positions = swash.read_gauge_positions(swash_dir)
 
-    mesh.create_mesh(bathymetry, resolution, gauge_positions)
+    mesh.create_mesh(
+        bathymetry, resolution, gauge_positions, porosity=porosity
+    )
 
 
 def apply_mesh(swash_dir: Path) -> None:
@@ -33,7 +35,6 @@ def apply_mesh(swash_dir: Path) -> None:
     )
 
     shutil.copy(swash_dir / "INPUT", swash_dir / "INPUT.bkp")
-    shutil.copy(swash_dir / "bathymetry.txt", swash_dir / "bathymetry.txt.bkp")
 
     swash.apply_mesh_to_input_file(swash_dir)
 

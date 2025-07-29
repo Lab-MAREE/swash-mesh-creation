@@ -1,7 +1,6 @@
 import numpy as np
 import plotly.graph_objects as go
 from scipy.interpolate import splev, splprep
-from scipy.ndimage import gaussian_filter
 
 named_colours = {
     "blue": "#89b4fa",
@@ -90,8 +89,8 @@ class BaieDesBacon:
         self.X, self.Y = np.meshgrid(self.x, self.y)
 
         # Typical depths for the region
-        self.max_depth = 25.0  # Maximum depth in bay
-        self.nearshore_depth = 8.0  # Typical nearshore depth
+        self.max_depth = 5.0  # Maximum depth in bay
+        self.nearshore_depth = 1.0  # Typical nearshore depth
 
     def create_realistic_shoreline(self) -> np.ndarray:
         """
@@ -150,7 +149,7 @@ class BaieDesBacon:
 
         return np.column_stack([self.shoreline_x, self.shoreline_y])
 
-    def create_realistic_bathymetry(self) -> np.ndarray:
+    def create_realistic_bathymetry(self) -> tuple[np.ndarray, np.ndarray]:
         """
         Create bathymetry that reflects the typical characteristics
         of a North Shore embayment like Baie des Bacon
@@ -181,17 +180,17 @@ class BaieDesBacon:
 
                     # Typical North Shore profile: gradual slope then deeper
                     if shore_distance < 50:
-                        # Very shallow nearshore (0-2m)
-                        depth = shore_distance * 0.04  # 4cm per metre
+                        # Very shallow nearshore (0-1m)
+                        depth = shore_distance * 0.02  # 2cm per metre
                     elif shore_distance < 200:
                         # Moderate slope to intermediate depth
-                        depth = 2.0 + (shore_distance - 50) * 0.03
+                        depth = 1.0 + (shore_distance - 50) * 0.01
                     elif shore_distance < 500:
                         # Gradual deepening
-                        depth = 6.5 + (shore_distance - 200) * 0.02
+                        depth = 2.5 + (shore_distance - 200) * 0.005
                     else:
                         # Deep water (asymptotic to max depth)
-                        depth = 12.5 + (self.max_depth - 12.5) * (
+                        depth = 4.0 + (self.max_depth - 4.0) * (
                             1 - np.exp(-(shore_distance - 500) / 200)
                         )
 
@@ -200,11 +199,11 @@ class BaieDesBacon:
                     bay_head_factor = np.exp(
                         -((self.x[i] - 1000) ** 2) / (400**2)
                     )
-                    depth = depth * (1 - 0.4 * bay_head_factor)
+                    depth = depth * (1 - 0.3 * bay_head_factor)
 
                     # Eastern side slightly deeper (closer to main channel)
                     if self.x[i] > 1200:
-                        depth = depth * 1.2
+                        depth = depth * 1.15
 
                     bathymetry[j, i] = depth
 
@@ -220,7 +219,7 @@ class BaieDesBacon:
                 for j in range(len(self.y)):
                     if bathymetry[j, i] > 0 and self.y[j] < 700:
                         # Add extra depth for deeper channel
-                        bathymetry[j, i] += 3.0
+                        bathymetry[j, i] += 1.0
 
         # 2. Shallow bar across bay mouth (common feature)
         bar_y = 600
@@ -229,13 +228,13 @@ class BaieDesBacon:
             if 400 < self.x[i] < 1600:  # Across bay mouth
                 for j in range(len(self.y)):
                     if abs(self.y[j] - bar_y) < bar_width / 2:
-                        if bathymetry[j, i] > 2:
+                        if bathymetry[j, i] > 1:
                             # Reduce depth on bar
-                            reduction = 2.0 * np.exp(
+                            reduction = 1.0 * np.exp(
                                 -((self.y[j] - bar_y) ** 2) / (40**2)
                             )
                             bathymetry[j, i] = max(
-                                1.0, bathymetry[j, i] - reduction
+                                0.5, bathymetry[j, i] - reduction
                             )
 
         # 3. Rocky patches (areas of reduced depth)
@@ -254,29 +253,23 @@ class BaieDesBacon:
                             + (self.y[j] - rock_y) ** 2
                         )
                         if rock_dist < rock_size:
-                            rock_effect = 1.5 * np.exp(
+                            rock_effect = 0.8 * np.exp(
                                 -(rock_dist**2) / (rock_size / 2) ** 2
                             )
                             bathymetry[j, i] = max(
-                                0.5, bathymetry[j, i] - rock_effect
+                                0.3, bathymetry[j, i] - rock_effect
                             )
 
         # 4. Add breakwaters for wave protection
-        bathymetry = self.add_breakwaters(bathymetry)
+        bathymetry, porosity = self.add_breakwaters(bathymetry)
 
-        # Smooth the bathymetry slightly to remove grid artifacts
-        bathymetry = gaussian_filter(bathymetry, sigma=1.0)
-
-        # Ensure realistic constraints
-        bathymetry = np.clip(bathymetry, -5.0, self.max_depth)
-
-        return bathymetry
+        return bathymetry, porosity
 
     def create_shoreline_boundary(self):
         """
         Create precise shoreline boundary for Gmsh
         """
-        bathymetry = self.create_realistic_bathymetry()
+        bathymetry, _ = self.create_realistic_bathymetry()
 
         # Find shoreline as zero contour
         shoreline_points = []
@@ -346,24 +339,30 @@ class BaieDesBacon:
 
         return gauge_positions
 
-    def add_breakwaters(self, bathymetry: np.ndarray) -> np.ndarray:
+    def add_breakwaters(
+        self, bathymetry: np.ndarray
+    ) -> tuple[np.ndarray, np.ndarray]:
         # Define breakwater positions and parameters
         # Format: (x, y, height, length, width, angle)
         breakwaters = [
             # Left outer breakwater
-            (400, 480, 10, 150, 20, 15),
+            (400, 480, 3.5, 150, 20, 15),
             # Left inner breakwater
-            (700, 500, 10, 120, 25, 10),
+            (700, 500, 3.5, 120, 25, 10),
             # Middle breakwater (lower height)
-            (1000, 510, 8, 100, 20, 0),
+            (1000, 510, 2, 100, 20, 0),
             # Right inner breakwater
-            (1300, 500, 10, 120, 25, -10),
+            (1300, 500, 3.5, 120, 25, -10),
             # Right outer breakwater
-            (1600, 480, 10, 150, 20, -15),
+            (1600, 480, 3.5, 150, 20, -15),
         ]
 
         # Slope ratio (1.75:1 means 1.75 horizontal to 1 vertical)
         slope_ratio = 1.75
+
+        breakwater_porosity = 0.4
+
+        porosity = np.ones_like(bathymetry)
 
         for (
             bw_x,
@@ -439,17 +438,20 @@ class BaieDesBacon:
                                         elevation = 0
 
                                 # Reduce water depth by breakwater elevation
-                                # Ensure we don't create negative depths
-                                bathymetry[j, i] = max(
-                                    0.1, bathymetry[j, i] - elevation
+                                bathymetry[j, i] = bathymetry[j, i] - elevation
+
+                                # add breakwater porosity if not already there
+                                porosity[j, i] = min(
+                                    porosity[j, i], breakwater_porosity
                                 )
 
-        return bathymetry
+        return bathymetry, porosity
 
     def export_bathymetry_data(self) -> np.ndarray:
         """Export bathymetry and shoreline data"""
-        bathymetry = self.create_realistic_bathymetry()
+        bathymetry, porosity = self.create_realistic_bathymetry()
         np.savetxt("bathymetry.txt", bathymetry, fmt="%.3f")
+        np.savetxt("porosity.txt", porosity, fmt="%.3f")
 
         # Export gauge positions
         gauge_positions = self.create_gauge_positions()
@@ -459,7 +461,7 @@ class BaieDesBacon:
 
     def visualize_domain(self):
         """Visualize the generated bathymetry and shoreline"""
-        bathymetry = self.create_realistic_bathymetry()
+        bathymetry, _ = self.create_realistic_bathymetry()
         gauge_positions = self.create_gauge_positions()
 
         min_depth = bathymetry.min()

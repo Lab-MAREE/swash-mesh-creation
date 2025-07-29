@@ -11,14 +11,20 @@ from src import utils
 ##########
 
 
-def read_bathymetry(swash_dir: Path) -> tuple[np.ndarray, tuple[float, float]]:
+def read_bathymetry(
+    swash_dir: Path,
+) -> tuple[np.ndarray, np.ndarray | None, tuple[float, float]]:
     bathymetry = np.loadtxt(swash_dir / "bathymetry.txt").astype(np.float64)
+    if (swash_dir / "porosity.txt").exists():
+        porosity = np.loadtxt(swash_dir / "porosity.txt").astype(np.float64)
+    else:
+        porosity = None
     _, (x_resolution, y_resolution) = _get_input_dimensions(
         swash_dir / "INPUT"
     )
     if bathymetry.ndim != 2:
         raise ValueError("Mesh creation is only available for a 2D context.")
-    return bathymetry, (x_resolution, y_resolution)
+    return bathymetry, porosity, (x_resolution, y_resolution)
 
 
 def read_gauge_positions(swash_dir: Path) -> list[tuple[float, float]]:
@@ -52,133 +58,19 @@ def extract_shoreline_boundary(
 
 
 def extract_breakwaters(
-    bathymetry: np.ndarray, resolution: tuple[float, float]
+    porosity: np.ndarray | None, resolution: tuple[float, float]
 ) -> list[tuple[float, float]]:
+    if porosity is None:
+        return []
+
     x_resolution, y_resolution = resolution
 
-    points: list[tuple[float, float]] = []
-
-    # Calculate gradients in both directions
-    grad_y, grad_x = np.gradient(bathymetry)
-
-    # Calculate gradient magnitude and angle
-    grad_magnitude = np.sqrt(grad_x**2 + grad_y**2)
-
-    # Calculate second derivatives to detect gradient changes
-    grad2_yy, grad2_yx = np.gradient(grad_y)
-    grad2_xy, grad2_xx = np.gradient(grad_x)
-
-    # Detect significant gradient changes (curvature)
-    # Breakwaters have high curvature where slope changes rapidly
-    curvature = np.abs(grad2_xx) + np.abs(grad2_yy)
-
-    # Find local maxima in bathymetry (elevated regions)
-    rows, cols = bathymetry.shape
-
-    # Threshold for significant gradient change
-    grad_threshold = np.percentile(grad_magnitude[grad_magnitude > 0], 75)
-    curv_threshold = np.percentile(curvature[curvature > 0], 80)
-
-    # First, find key breakwater points
-    key_points = []
-    for j in range(2, rows - 2):
-        for i in range(2, cols - 2):
-            # Check if this point has significant gradient
-            if grad_magnitude[j, i] > grad_threshold:
-                # Check if there's significant curvature (gradient change)
-                if curvature[j, i] > curv_threshold:
-                    # Check if this is an elevated region
-                    center_val = bathymetry[j, i]
-                    # Look at a 3x3 neighborhood
-                    neighborhood = bathymetry[j - 1 : j + 2, i - 1 : i + 2]
-                    neighbors_avg = (np.sum(neighborhood) - center_val) / 8
-
-                    # Check if elevated compared to neighbors
-                    if center_val > neighbors_avg + 0.1:  # reduced threshold
-                        # Additional check: is this part of a ridge structure?
-                        # Check if gradients change sign in nearby points
-                        grad_changes_x = (
-                            grad_x[j, i - 1] * grad_x[j, i + 1] < 0
-                        ) or (
-                            grad_x[j, i - 2 : i + 3].max()
-                            * grad_x[j, i - 2 : i + 3].min()
-                            < 0
-                        )
-                        grad_changes_y = (
-                            grad_y[j - 1, i] * grad_y[j + 1, i] < 0
-                        ) or (
-                            grad_y[j - 2 : j + 3, i].max()
-                            * grad_y[j - 2 : j + 3, i].min()
-                            < 0
-                        )
-
-                        # If gradient changes sign in either direction
-                        if grad_changes_x or grad_changes_y:
-                            key_points.append((i, j))
-
-    # Create a mask for all breakwater points
-    breakwater_mask = np.zeros_like(bathymetry, dtype=bool)
-
-    # Mark all key points
-    for i, j in key_points:
-        breakwater_mask[j, i] = True
-
-    # Find all points between key points
-    # Group points by row and column
-    rows_with_points = {}
-    cols_with_points = {}
-
-    for i, j in key_points:
-        if j not in rows_with_points:
-            rows_with_points[j] = []
-        rows_with_points[j].append(i)
-
-        if i not in cols_with_points:
-            cols_with_points[i] = []
-        cols_with_points[i].append(j)
-
-    # Fill in points between key points in rows
-    for j, i_values in rows_with_points.items():
-        i_values = sorted(i_values)
-        for k in range(len(i_values) - 1):
-            i_start, i_end = i_values[k], i_values[k + 1]
-            # Fill all points between consecutive key points
-            if i_end - i_start < 10:  # reasonable distance
-                for i in range(i_start, i_end + 1):
-                    breakwater_mask[j, i] = True
-
-    # Fill in points between key points in columns
-    for i, j_values in cols_with_points.items():
-        j_values = sorted(j_values)
-        for k in range(len(j_values) - 1):
-            j_start, j_end = j_values[k], j_values[k + 1]
-            # Fill all points between consecutive key points
-            if j_end - j_start < 10:  # reasonable distance
-                for j in range(j_start, j_end + 1):
-                    breakwater_mask[j, i] = True
-
-    # Also connect diagonally adjacent key points
-    for idx1, (i1, j1) in enumerate(key_points):
-        for idx2 in range(idx1 + 1, len(key_points)):
-            i2, j2 = key_points[idx2]
-            # Check if points are diagonally close
-            if abs(i2 - i1) <= 5 and abs(j2 - j1) <= 5:
-                # Fill rectangle between points
-                i_min, i_max = min(i1, i2), max(i1, i2)
-                j_min, j_max = min(j1, j2), max(j1, j2)
-                for j in range(j_min, j_max + 1):
-                    for i in range(i_min, i_max + 1):
-                        # Check if this point is elevated enough
-                        if bathymetry[j, i] > 14.5:  # threshold
-                            breakwater_mask[j, i] = True
-
-    # Convert mask to list of points
-    for j in range(rows):
-        for i in range(cols):
-            if breakwater_mask[j, i]:
-                points.append((i * x_resolution, j * y_resolution))
-
-    return points
+    return [
+        (j * x_resolution, i * y_resolution)
+        for i in range(porosity.shape[0])
+        for j in range(porosity.shape[1])
+        if porosity[i, j] != 1
+    ]
 
 
 def create_diagram(swash_dir: Path) -> go.Figure:

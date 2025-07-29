@@ -13,8 +13,9 @@ def create_mesh(
     resolution: tuple[float, float],
     gauge_positions: list[tuple[float, float]],
     *,
-    lc_fine: float = 1.0,
-    lc_coarse: float = 20.0,
+    porosity: np.ndarray | None = None,
+    lc_fine: float = 5.0,
+    lc_coarse: float = 50.0,
     transition_distance: float = 50.0,
 ) -> None:
     x_resolution, y_resolution = resolution
@@ -25,7 +26,7 @@ def create_mesh(
     y_max = (bathymetry.shape[0] - 1) * y_resolution
 
     shoreline = swash.extract_shoreline_boundary(bathymetry, resolution)
-    breakwaters = swash.extract_breakwaters(bathymetry, resolution)
+    breakwaters = swash.extract_breakwaters(porosity, resolution)
 
     fine_radius = max(x_resolution, y_resolution) / 2
 
