@@ -285,12 +285,38 @@ def create_diagram(swash_dir: Path) -> go.Figure:
     )
 
 
-def apply_mesh_to_input_files(swash_dir: Path) -> None:
-    bathymetry, resolution = read_bathymetry(swash_dir)
-    bathymetry = _convert_bathymetry(bathymetry, resolution)
-    nodes, node_ids = _read_mesh_nodes(swash_dir)
-    _apply_mesh_to_bathymetry(swash_dir, bathymetry, nodes)
-    _apply_mesh_to_input(swash_dir)
+def apply_mesh_to_input_file(swash_dir: Path) -> None:
+    with open(swash_dir / "INPUT") as f:
+        lines = f.readlines()
+    with open(swash_dir / "INPUT", "w") as f:
+        for line in lines:
+            if line.startswith("CGRID"):
+                f.write("CGRID UNSTRUCTURED\n")
+                f.write("READGRID UNSTRUC TRIANGLE 'mesh'\n")
+            elif line.startswith("BOUND"):
+                if "EAST" in line:
+                    f.write(line.replace("EAST", "SIDE 3 CCW"))
+                elif "SOUTH" in line:
+                    f.write(line.replace("SOUTH", "SIDE 4 CCW"))
+                elif "WEST" in line:
+                    f.write(line.replace("WEST", "SIDE 1 CCW"))
+                elif "NORTH" in line:
+                    f.write(line.replace("NORTH", "SIDE 2 CCW"))
+                else:
+                    f.write(line)
+            elif line.startswith("SPONGELAYER"):
+                if "EAST" in line:
+                    f.write(line.replace("EAST", "3"))
+                elif "SOUTH" in line:
+                    f.write(line.replace("SOUTH", "4"))
+                elif "WEST" in line:
+                    f.write(line.replace("WEST", "1"))
+                elif "NORTH" in line:
+                    f.write(line.replace("NORTH", "2"))
+                else:
+                    f.write(line)
+            else:
+                f.write(line)
 
 
 ###########
@@ -405,41 +431,3 @@ def _apply_mesh_to_bathymetry(
     with open("bathymetry.txt", "w") as f:
         for val in bathymetry:
             f.write(f"{val:.3f}\n")
-
-
-def _apply_mesh_to_input(swash_dir: Path) -> None:
-    with open(swash_dir / "INPUT") as f:
-        lines = f.readlines()
-    with open(swash_dir / "INPUT", "w") as f:
-        for line in lines:
-            if line.startswith("CGRID"):
-                f.write("CGRID UNSTRUCTURED\n")
-                f.write("READGRID UNSTRUC TRIANGLE 'mesh'\n")
-            elif line.startswith("INPGRID BOTTOM"):
-                f.write("INPGRID BOTTOM UNSTRUCTURED\n")
-            elif line.startswith("READINP BOTTOM"):
-                f.write("READINP BOTTOM 1.0 'bathymetry.txt' FREE\n")
-            elif line.startswith("BOUND"):
-                if "EAST" in line:
-                    f.write(line.replace("EAST", "SIDE 3 CCW"))
-                elif "SOUTH" in line:
-                    f.write(line.replace("SOUTH", "SIDE 4 CCW"))
-                elif "WEST" in line:
-                    f.write(line.replace("WEST", "SIDE 1 CCW"))
-                elif "NORTH" in line:
-                    f.write(line.replace("NORTH", "SIDE 2 CCW"))
-                else:
-                    f.write(line)
-            elif line.startswith("SPONGELAYER"):
-                if "EAST" in line:
-                    f.write(line.replace("EAST", "3"))
-                elif "SOUTH" in line:
-                    f.write(line.replace("SOUTH", "4"))
-                elif "WEST" in line:
-                    f.write(line.replace("WEST", "1"))
-                elif "NORTH" in line:
-                    f.write(line.replace("NORTH", "2"))
-                else:
-                    f.write(line)
-            else:
-                f.write(line)

@@ -1,10 +1,3 @@
-"""
-Fixed version of mesh.py focusing on the core issues:
-1. Correct node ID mapping in triangles
-2. Remove unnecessary edge file generation (not needed for SWASH)
-3. Ensure proper triangle orientation
-"""
-
 import gmsh
 import numpy as np
 
@@ -20,8 +13,8 @@ def create_mesh(
     resolution: tuple[float, float],
     gauge_positions: list[tuple[float, float]],
     *,
-    lc_fine: float = 5.0,
-    lc_coarse: float = 10.0,
+    lc_fine: float = 1.0,
+    lc_coarse: float = 20.0,
     transition_distance: float = 50.0,
 ) -> None:
     x_resolution, y_resolution = resolution
@@ -33,6 +26,8 @@ def create_mesh(
 
     shoreline = swash.extract_shoreline_boundary(bathymetry, resolution)
     breakwaters = swash.extract_breakwaters(bathymetry, resolution)
+
+    fine_radius = max(x_resolution, y_resolution) / 2
 
     # initialize gmsh
     gmsh.initialize()
@@ -50,6 +45,7 @@ def create_mesh(
         y_max,
         lc_fine=lc_fine,
         lc_coarse=lc_coarse,
+        fine_radius=fine_radius,
         transition_distance=transition_distance,
     )
 
@@ -78,8 +74,10 @@ def _generate_mesh(
     *,
     lc_fine: float,
     lc_coarse: float,
+    fine_radius: float,
     transition_distance: float,
 ) -> None:
+    # domain corners
     domain_points = [
         gmsh.model.geo.add_point(x_min, y_min, 0, lc_coarse),
         gmsh.model.geo.add_point(x_min, y_max, 0, lc_coarse),
@@ -89,65 +87,70 @@ def _generate_mesh(
 
     # domain boundary lines
     domain_lines = [
-        gmsh.model.geo.add_line(domain_points[0], domain_points[1]),
-        gmsh.model.geo.add_line(domain_points[1], domain_points[2]),
-        gmsh.model.geo.add_line(domain_points[2], domain_points[3]),
-        gmsh.model.geo.add_line(domain_points[3], domain_points[0]),
+        gmsh.model.geo.add_line(domain_points[i], domain_points[(i + 1) % 4])
+        for i in range(4)
     ]
 
     # domain curve and surface
     domain_loop = gmsh.model.geo.add_curve_loop(domain_lines)
     gmsh.model.geo.add_plane_surface([domain_loop])
 
-    # specify points of higher resolution
-    shoreline_points = [
-        gmsh.model.geo.add_point(x, y, 0, lc_fine) for x, y in shoreline
-    ]
-    finer_points = [
-        gmsh.model.geo.add_point(x, y, 0, lc_fine)
-        for x, y in sorted(
-            set([*breakwaters, *gauge_positions]) - set(shoreline)
-        )
-    ]
-
-    # lines for the shoreline
-    finer_lines = [
-        gmsh.model.geo.add_line(point_1, point_2)
-        for point_1, point_2 in zip(
-            shoreline_points[:-1], shoreline_points[1:], strict=True
-        )
-    ]
-
-    # synchronize geometry
+    # synchronize before adding fields
     gmsh.model.geo.synchronize()
 
-    # distance field from shoreline
-    gmsh.model.mesh.field.add("Distance", 1)
-    gmsh.model.mesh.field.set_numbers(1, "PointsList", finer_points)
-    gmsh.model.mesh.field.set_numbers(1, "CurvesList", finer_lines)
-
-    # threshold field for mesh size transition
-    gmsh.model.mesh.field.add("Threshold", 2)
-    gmsh.model.mesh.field.set_number(2, "InField", 1)
-    gmsh.model.mesh.field.set_number(2, "LcMin", lc_fine)
-    gmsh.model.mesh.field.set_number(2, "LcMax", lc_coarse)
-    gmsh.model.mesh.field.set_number(2, "DistMin", 0)
-    gmsh.model.mesh.field.set_number(2, "DistMax", transition_distance)
-
-    # set threshold field as background mesh field
-    gmsh.model.mesh.field.set_as_background_mesh(2)
+    # finer resolution close to important points
+    _adjust_mesh_sizes(
+        sorted(set([*shoreline, *gauge_positions, *breakwaters])),
+        lc_fine=lc_fine,
+        lc_coarse=lc_coarse,
+        fine_radius=fine_radius,
+        transition_distance=transition_distance,
+    )
 
     # meshing options
-    gmsh.option.setNumber("Mesh.Algorithm", 5)  # Delaunay
-    gmsh.option.setNumber("Mesh.RecombineAll", 0)  # triangular mesh
-    gmsh.option.setNumber("Mesh.Smoothing", 10)  # smooth the mesh
-    gmsh.option.setNumber("Mesh.AnisoMax", 1.0)  # limit anisotropy
+    gmsh.option.setNumber("Mesh.Algorithm", 5)  # delaunay
+    gmsh.option.setNumber("Mesh.Smoothing", 10)  # smoothing iterations
 
     # generate mesh
     gmsh.model.mesh.generate(2)
-
-    # optimize mesh quality
     gmsh.model.mesh.optimize("Netgen")
+
+
+def _adjust_mesh_sizes(
+    points: list[tuple[float, float]],
+    *,
+    lc_fine: float,
+    lc_coarse: float,
+    fine_radius: float,
+    transition_distance: float,
+) -> None:
+    # MathEval field for size control
+    gmsh.option.setNumber("Mesh.MeshSizeExtendFromBoundary", 0)
+    gmsh.option.setNumber("Mesh.MeshSizeFromPoints", 0)
+    gmsh.option.setNumber("Mesh.MeshSizeFromCurvature", 0)
+
+    field_list: list[int] = []
+    for i, (x, y) in enumerate(points):
+        gmsh.model.mesh.field.add("Ball", i + 1)
+        gmsh.model.mesh.field.setNumber(i + 1, "VIn", lc_fine)
+        gmsh.model.mesh.field.setNumber(i + 1, "VOut", lc_coarse)
+        gmsh.model.mesh.field.setNumber(i + 1, "Radius", fine_radius)
+        gmsh.model.mesh.field.setNumber(i + 1, "XCenter", x)
+        gmsh.model.mesh.field.setNumber(i + 1, "YCenter", y)
+        field_list.append(i + 1)
+
+    if points:
+        gmsh.model.mesh.field.add("MathEval", len(field_list) + 1)
+        dist_expr = "1e10"
+        for x, y in points:
+            dist_expr = f"min({dist_expr}, sqrt((x-{x})^2 + (y-{y})^2))"
+        size_expr = f"{lc_fine} + ({lc_coarse}-{lc_fine}) * min(1.0, max(0.0, ({dist_expr}-{fine_radius})/({transition_distance}-{fine_radius})))"
+        gmsh.model.mesh.field.setString(len(field_list) + 1, "F", size_expr)
+        field_list.append(len(field_list) + 1)
+
+    # Create minimum field
+    if field_list:
+        gmsh.model.mesh.field.setAsBackgroundMesh(field_list[-1])
 
 
 def _write_mesh(
@@ -162,77 +165,169 @@ def _write_in_triangle_format(
     x_min: float, y_min: float, x_max: float, y_max: float
 ) -> None:
     print("Converting to triangle format")
+    nodes, convert_id = _get_triangle_nodes(x_min, y_min, x_max, y_max)
+    triangles = _get_triangle_triangles(
+        nodes, convert_id, x_min, y_min, x_max, y_max
+    )
 
-    # Get all nodes from gmsh
-    node_tags, node_coords, _ = gmsh.model.mesh.get_nodes()
-    node_coords = node_coords.reshape(-1, 3)[:, :2]  # Drop z coordinate
-
-    # Create mapping from gmsh node tags to 1-based indices for output
-    gmsh_to_output = {tag: idx + 1 for idx, tag in enumerate(node_tags)}
-
-    # Determine boundary markers for nodes
-    tolerance = 1e-10
-    boundary_markers = []
-
-    for x, y in node_coords:
-        if abs(x - x_min) < tolerance:
-            marker = 1  # West
-        elif abs(x - x_max) < tolerance:
-            marker = 3  # East
-        elif abs(y - y_min) < tolerance:
-            marker = 4  # South
-        elif abs(y - y_max) < tolerance:
-            marker = 2  # North
-        else:
-            marker = 0  # Interior
-        boundary_markers.append(marker)
-
-    # Write node file
     with open("mesh.node", "w") as f:
-        f.write(f"{len(node_tags)} 2 0 1\n")
-        for i, ((x, y), marker) in enumerate(
-            zip(node_coords, boundary_markers)
-        ):
-            f.write(f"{i+1} {x:.10e} {y:.10e} {marker}\n")
+        # header: number_of_vertices dimension attributes boundary_markers
+        f.write(f"{nodes.shape[0]} 2 0 1\n")
+        for i, (x, y, edge) in enumerate(nodes):
+            f.write(f"{i+1} {x:.6f} {y:.6f} {int(edge)}\n")
 
-    # Get triangles from gmsh
-    elem_types, elem_tags, elem_node_tags = gmsh.model.mesh.get_elements(2)
-
-    triangles = []
-    for elem_type, node_tags in zip(elem_types, elem_node_tags):
-        if elem_type == 2:  # Triangular elements
-            # Process triangles in groups of 3 nodes
-            for i in range(0, len(node_tags), 3):
-                # Get gmsh node tags for this triangle
-                gmsh_n1 = node_tags[i]
-                gmsh_n2 = node_tags[i + 1]
-                gmsh_n3 = node_tags[i + 2]
-
-                # Convert to output node numbers
-                n1 = gmsh_to_output[gmsh_n1]
-                n2 = gmsh_to_output[gmsh_n2]
-                n3 = gmsh_to_output[gmsh_n3]
-
-                # Get coordinates for orientation check
-                x1, y1 = node_coords[n1 - 1]
-                x2, y2 = node_coords[n2 - 1]
-                x3, y3 = node_coords[n3 - 1]
-
-                # Check orientation (positive area = counter-clockwise)
-                area = 0.5 * ((x2 - x1) * (y3 - y1) - (x3 - x1) * (y2 - y1))
-
-                if area > 0:
-                    triangles.append((n1, n2, n3))
-                else:
-                    # Swap to make counter-clockwise
-                    triangles.append((n1, n3, n2))
-
-    # Write element file
     with open("mesh.ele", "w") as f:
+        # header: number_of_triangles nodes_per_triangle attributes
         f.write(f"{len(triangles)} 3 0\n")
-        for i, (n1, n2, n3) in enumerate(triangles):
-            f.write(f"{i+1} {n1} {n2} {n3}\n")
+        for i, (node_1, node_2, node_3) in enumerate(triangles):
+            f.write(f"{i+1} {node_1+1} {node_2+1} {node_3+1}\n")
 
     print("Created Triangle format files:")
-    print(f"  - mesh.node ({len(node_tags)} nodes)")
+    print(f"  - mesh.node ({nodes.shape[0]} nodes)")
     print(f"  - mesh.ele ({len(triangles)} triangles)")
+
+
+def _get_triangle_nodes(
+    x_min: float, y_min: float, x_max: float, y_max: float
+) -> tuple[np.ndarray, dict[int, int]]:
+    node_ids, nodes, _ = gmsh.model.mesh.get_nodes()
+    convert_id = {id: i for i, id in enumerate(node_ids)}
+
+    # reshape coordinates (x, y, z for each node) and drop z that's always 0
+    nodes = nodes.reshape(-1, 3)[:, :2]
+
+    # 1: west, 2: north, 3: east, 4: south
+    edges: list[int] = []
+    for x, y in nodes:
+        if x == x_min:
+            if y < y_max:
+                edges.append(1)
+            else:
+                edges.append(2)
+        elif y == y_max:
+            if x < x_max:
+                edges.append(2)
+            else:
+                edges.append(3)
+        elif x == x_max:
+            if y > y_min:
+                edges.append(3)
+            else:
+                edges.append(4)
+        elif y == y_min:
+            edges.append(4)
+        else:
+            edges.append(0)
+
+    nodes = np.concatenate(
+        [
+            nodes,
+            np.array(edges).reshape(-1, 1),
+        ],
+        axis=1,
+    )
+
+    return nodes, convert_id
+
+
+def _get_triangle_triangles(
+    nodes: np.ndarray,
+    convert_id: dict[int, int],
+    x_min: float,
+    y_min: float,
+    x_max: float,
+    y_max: float,
+) -> list[tuple[int, int, int]]:
+    element_types, element_tags, node_connectivity = (
+        gmsh.model.mesh.get_elements(2)
+    )
+
+    # find triangular elements (type 2 in gmsh) and the (x, y) coordinates of
+    # the corner nodes, and make sure node 1 is the furthest right and down
+    triangles_ = [
+        sorted(
+            (
+                (
+                    convert_id[node[0]],
+                    nodes[convert_id[node[0]]][:2].tolist(),
+                ),
+                (
+                    convert_id[node[1]],
+                    nodes[convert_id[node[1]]][:2].tolist(),
+                ),
+                (
+                    convert_id[node[2]],
+                    nodes[convert_id[node[2]]][:2].tolist(),
+                ),
+            ),
+            key=lambda node: (-node[1][0], node[1][1]),
+        )
+        for nodes_, type_ in zip(node_connectivity, element_types, strict=True)
+        for node in nodes_.reshape(-1, 3)
+        if type_ == 2
+    ]
+
+    # ensure triangles are counterclockwise
+    triangles: list[tuple[int, int, int]] = []
+    for (
+        (node_1_id, node_1),
+        (node_2_id, node_2),
+        (node_3_id, node_3),
+    ) in triangles_:
+        # Calculate cross product to determine orientation
+        # (node_2 - node_1) x (node_3 - node_1)
+        cross_product = (node_2[0] - node_1[0]) * (node_3[1] - node_1[1]) - (
+            node_2[1] - node_1[1]
+        ) * (node_3[0] - node_1[0])
+
+        if cross_product > 0:
+            # Already counter-clockwise
+            triangles.append((node_1_id, node_2_id, node_3_id))
+        else:
+            # Clockwise, so swap node_2 and node_3
+            triangles.append((node_1_id, node_3_id, node_2_id))
+
+    return triangles
+
+
+def _diagnose_shoreline(shoreline_points: list[tuple[float, float]]) -> None:
+    """
+    Check for issues in shoreline points.
+    """
+    print(f"Total points: {len(shoreline_points)}")
+
+    # Check for duplicates
+    unique_points = list(set(shoreline_points))
+    if len(unique_points) < len(shoreline_points):
+        print(
+            f"WARNING: {len(shoreline_points) - len(unique_points)} duplicate points found!"
+        )
+
+    # Check for very close points
+    min_dist = float("inf")
+    problem_pairs = []
+
+    for i in range(len(shoreline_points) - 1):
+        x1, y1 = shoreline_points[i]
+        x2, y2 = shoreline_points[i + 1]
+        dist = np.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
+
+        if dist < min_dist:
+            min_dist = dist
+
+        if dist < 0.1:  # Threshold
+            problem_pairs.append((i, i + 1, dist))
+
+    print(f"Minimum distance between consecutive points: {min_dist}")
+    if problem_pairs:
+        print(f"WARNING: {len(problem_pairs)} pairs of points are very close:")
+        for i, j, d in problem_pairs[:5]:  # Show first 5
+            print(f"  Points {i} and {j}: distance = {d}")
+
+    # Check for self-intersections (simple check)
+    # This is a basic check - for complete check use shapely or similar
+    for i in range(len(shoreline_points) - 3):
+        for j in range(i + 2, len(shoreline_points) - 1):
+            # Check if line segments (i,i+1) and (j,j+1) intersect
+            # (Basic implementation - can be improved)
+            pass
