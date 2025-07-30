@@ -8,7 +8,7 @@ $ MODEL SETUP
 $=============================================================================
 
 $ Freshwater properties, standard gravity
-SET level=10.0 grav=9.81 rhowat=1000.0
+SET level=6.0 grav=9.81 rhowat=1000.0
 
 $ 2D nonstationary simulation
 MODE NONSTATIONARY TWODIMENSIONAL
@@ -41,9 +41,9 @@ $=============================================================================
 $ WAVE GENERATION
 $=============================================================================
 
-$ Irregular waves with TMA spectrum: Hs=0.5m, Tp=6.0s, cycle=1200.0s
+$ Irregular waves with TMA spectrum: Hs=2.0m, Tp=6.0s, cycle=1200.0s
 BOUND SHAPESPEC JONSWAP 3.3 PEAK DSPR POWER
-BOUND EAST BTYPE WEAK CON REG 0.5 6.0 90.0
+BOUND EAST BTYPE WEAK CON REG 2.0 6.0 90.0
 
 $ Sponge layers 
 SPONGELAYER NORTH 10.
