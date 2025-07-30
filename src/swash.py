@@ -177,38 +177,13 @@ def create_diagram(swash_dir: Path) -> go.Figure:
     )
 
 
-def apply_mesh_to_input_file(swash_dir: Path) -> None:
-    with open(swash_dir / "INPUT") as f:
-        lines = f.readlines()
-    with open(swash_dir / "INPUT", "w") as f:
-        for line in lines:
-            if line.startswith("CGRID"):
-                f.write("CGRID UNSTRUCTURED\n")
-                f.write("READGRID UNSTRUC TRIANGLE 'mesh'\n")
-            elif line.startswith("BOUND"):
-                if "EAST" in line:
-                    f.write(line.replace("EAST", "SIDE 3 CCW"))
-                elif "SOUTH" in line:
-                    f.write(line.replace("SOUTH", "SIDE 4 CCW"))
-                elif "WEST" in line:
-                    f.write(line.replace("WEST", "SIDE 1 CCW"))
-                elif "NORTH" in line:
-                    f.write(line.replace("NORTH", "SIDE 2 CCW"))
-                else:
-                    f.write(line)
-            elif line.startswith("SPONGELAYER"):
-                if "EAST" in line:
-                    f.write(line.replace("EAST", "3"))
-                elif "SOUTH" in line:
-                    f.write(line.replace("SOUTH", "4"))
-                elif "WEST" in line:
-                    f.write(line.replace("WEST", "1"))
-                elif "NORTH" in line:
-                    f.write(line.replace("NORTH", "2"))
-                else:
-                    f.write(line)
-            else:
-                f.write(line)
+def apply_mesh_to_input_files(swash_dir: Path) -> None:
+    # bathymetry, porosity, resolution = read_bathymetry(swash_dir)
+    # nodes, _ = _read_mesh_nodes(swash_dir)
+    _apply_mesh_to_input_file(swash_dir)
+    # _apply_mesh_to_bathymetry(
+    #     swash_dir, bathymetry, porosity, resolution, nodes
+    # )
 
 
 ###########
@@ -314,12 +289,87 @@ def _read_mesh_nodes(
     return np.array(nodes), np.array(node_ids)
 
 
+def _apply_mesh_to_input_file(swash_dir: Path) -> None:
+    with open(swash_dir / "INPUT") as f:
+        lines = f.readlines()
+    with open(swash_dir / "INPUT", "w") as f:
+        for line in lines:
+            if line.startswith("CGRID"):
+                f.write("CGRID UNSTRUCTURED\n")
+                f.write("READGRID UNSTRUC TRIANGLE 'mesh'\n")
+            elif line.startswith("BOUND"):
+                if "EAST" in line:
+                    f.write(line.replace("EAST", "SIDE 3 CCW"))
+                elif "SOUTH" in line:
+                    f.write(line.replace("SOUTH", "SIDE 4 CCW"))
+                elif "WEST" in line:
+                    f.write(line.replace("WEST", "SIDE 1 CCW"))
+                elif "NORTH" in line:
+                    f.write(line.replace("NORTH", "SIDE 2 CCW"))
+                else:
+                    f.write(line)
+            elif line.startswith("SPONGELAYER"):
+                if "EAST" in line:
+                    f.write(line.replace("EAST", "3"))
+                elif "SOUTH" in line:
+                    f.write(line.replace("SOUTH", "4"))
+                elif "WEST" in line:
+                    f.write(line.replace("WEST", "1"))
+                elif "NORTH" in line:
+                    f.write(line.replace("NORTH", "2"))
+                else:
+                    f.write(line)
+            # elif line.startswith("INPGRID"):
+            #     f.write(f"INPGRID {line.split()[1]} UNSTRUCTURED\n")
+            else:
+                f.write(line)
+
+
 def _apply_mesh_to_bathymetry(
-    swash_dir: Path, bathymetry: np.ndarray, nodes: np.ndarray
+    swash_dir: Path,
+    bathymetry: np.ndarray,
+    porosity: np.ndarray | None,
+    resolution: tuple[float, float],
+    nodes: np.ndarray,
 ) -> None:
+    x_resolution, y_resolution = resolution
+    bathymetry_positions = np.hstack(
+        [
+            np.tile(
+                np.arange(bathymetry.shape[1]), bathymetry.shape[0]
+            ).reshape(-1, 1)
+            * x_resolution,
+            np.repeat(
+                np.arange(bathymetry.shape[0]), bathymetry.shape[1]
+            ).reshape(-1, 1)
+            * y_resolution,
+        ]
+    )
+    bathymetry_values = bathymetry.reshape(-1)
     bathymetry = scipy.interpolate.griddata(
-        bathymetry[:, :2], bathymetry[:, 2], nodes
+        bathymetry_positions, bathymetry_values, nodes
     )
     with open("bathymetry.txt", "w") as f:
         for val in bathymetry:
             f.write(f"{val:.3f}\n")
+
+    if porosity is not None:
+        porosity_positions = np.hstack(
+            [
+                np.tile(
+                    np.arange(porosity.shape[1]), porosity.shape[0]
+                ).reshape(-1, 1)
+                * x_resolution,
+                np.repeat(
+                    np.arange(porosity.shape[0]), porosity.shape[1]
+                ).reshape(-1, 1)
+                * y_resolution,
+            ]
+        )
+        porosity_values = porosity.reshape(-1)
+        porosity = scipy.interpolate.griddata(
+            porosity_positions, porosity_values, nodes
+        )
+        with open("porosity.txt", "w") as f:
+            for val in porosity:
+                f.write(f"{val:.3f}\n")

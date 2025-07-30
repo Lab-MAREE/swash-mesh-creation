@@ -1,3 +1,6 @@
+import sys
+from pathlib import Path
+
 import numpy as np
 import plotly.graph_objects as go
 from scipy.interpolate import splev, splprep
@@ -317,8 +320,10 @@ class BaieDesBacon:
         """
         gauge_positions = np.array(
             [
-                # Original gauge 3: Head of bay (shallow area)
+                # Head of bay (shallow area)
                 [1000, 1150],
+                # Tail of bay (deep area)
+                [1000, 200],
                 # Left outer breakwater gauges (x=400, y=480)
                 [400, 430],  # Before (seaward)
                 [400, 530],  # After (landward)
@@ -447,19 +452,19 @@ class BaieDesBacon:
 
         return bathymetry, porosity
 
-    def export_bathymetry_data(self) -> np.ndarray:
+    def export_bathymetry_data(self, path: Path) -> np.ndarray:
         """Export bathymetry and shoreline data"""
         bathymetry, porosity = self.create_realistic_bathymetry()
-        np.savetxt("bathymetry.txt", bathymetry, fmt="%.3f")
-        np.savetxt("porosity.txt", porosity, fmt="%.3f")
+        np.savetxt(path / "bathymetry.txt", bathymetry, fmt="%.3f")
+        np.savetxt(path / "porosity.txt", porosity, fmt="%.3f")
 
         # Export gauge positions
         gauge_positions = self.create_gauge_positions()
-        np.savetxt("gauge_positions.txt", gauge_positions, fmt="%.1f")
+        np.savetxt(path / "gauge_positions.txt", gauge_positions, fmt="%.1f")
 
         return bathymetry
 
-    def visualize_domain(self):
+    def visualize_domain(self, path: Path):
         """Visualize the generated bathymetry and shoreline"""
         bathymetry, _ = self.create_realistic_bathymetry()
         gauge_positions = self.create_gauge_positions()
@@ -522,10 +527,17 @@ class BaieDesBacon:
             },
         )
 
-        fig.write_image("baie_des_bacon.png", width=800, height=600, scale=2)
+        fig.write_image(
+            path / "baie_des_bacon.png", width=800, height=600, scale=2
+        )
 
 
 if __name__ == "__main__":
+    if len(sys.argv) != 2:
+        print("Usage: python parse_swash_outputs.py <swash_dir>")
+        path = Path()
+    else:
+        path = Path(sys.argv[1])
     generator = BaieDesBacon()
-    bathymetry = generator.export_bathymetry_data()
-    generator.visualize_domain()
+    bathymetry = generator.export_bathymetry_data(path)
+    generator.visualize_domain(path)

@@ -14,7 +14,7 @@ def create_mesh(
     gauge_positions: list[tuple[float, float]],
     *,
     porosity: np.ndarray | None = None,
-    lc_fine: float = 5.0,
+    lc_fine: float = 10.0,
     lc_coarse: float = 50.0,
     transition_distance: float = 50.0,
 ) -> None:
@@ -101,7 +101,8 @@ def _generate_mesh(
 
     # finer resolution close to important points
     _adjust_mesh_sizes(
-        sorted(set([*shoreline, *gauge_positions, *breakwaters])),
+        # sorted(set([*shoreline, *gauge_positions, *breakwaters])),
+        sorted(set([*gauge_positions, *breakwaters])),
         lc_fine=lc_fine,
         lc_coarse=lc_coarse,
         fine_radius=fine_radius,

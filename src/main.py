@@ -35,8 +35,11 @@ def apply_mesh(swash_dir: Path) -> None:
     )
 
     shutil.copy(swash_dir / "INPUT", swash_dir / "INPUT.bkp")
+    shutil.copy(swash_dir / "bathymetry.txt", swash_dir / "bathymetry.txt.bkp")
+    if (swash_dir / "porosity.txt").exists():
+        shutil.copy(swash_dir / "porosity.txt", swash_dir / "porosity.txt.bkp")
 
-    swash.apply_mesh_to_input_file(swash_dir)
+    swash.apply_mesh_to_input_files(swash_dir)
 
 
 ###########
