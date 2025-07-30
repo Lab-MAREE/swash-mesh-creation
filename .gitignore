@@ -17,6 +17,9 @@ mesh.msh
 mesh.node
 norm_end
 swashinit
+timeseries.csv
+timeseries.txt
+wave_statistics.csv
 wave_statistics.txt
 
 /scripts/baie_des_bacon.png
