@@ -7,10 +7,8 @@ $=============================================================================
 $ MODEL SETUP
 $=============================================================================
 
-$ Freshwater properties, standard gravity
 SET level=6.0 grav=9.81 rhowat=1000.0
 
-$ 2D nonstationary simulation
 MODE NONSTATIONARY TWODIMENSIONAL
 
 $=============================================================================
@@ -41,9 +39,8 @@ $=============================================================================
 $ WAVE GENERATION
 $=============================================================================
 
-$ Irregular waves with TMA spectrum: Hs=2.0m, Tp=6.0s, cycle=1200.0s
-BOUND SHAPESPEC JONSWAP 3.3 PEAK DSPR POWER
-BOUND EAST BTYPE WEAK CON REG 2.0 6.0 90.0
+BOUND SHAPESPEC JONSWAP 3.3 SIG PEAK DSPR DEGREES
+BOUND SOUTH BTYPE WEAK CON SPECTRUM 2.0 6.0 180.0 15.0
 
 $ Sponge layers 
 SPONGELAYER NORTH 10.
@@ -54,27 +51,24 @@ $=============================================================================
 $ PHYSICS
 $=============================================================================
 
-$ Manning friction n=0.019
 FRICTION MANNING 0.019
 
-$ Wave breaking for coarse vertical resolution
 BREAKING 0.6 0.3
 
-$ Non-hydrostatic with Box scheme (optimal for 2-3 layers)
 NONHYDROSTATIC BOX 1.0
 
 $=============================================================================
 $ OUTPUT
 $=============================================================================
 
-$ Wave gauges
 POINTS 'GAUGES' FILE 'gauge_positions.txt'
 
-$ Wave statistics (last 30 minutes by default)
-QUANTITY HSIG SETUP MVEL dur 30 min
+QUANTITY HSIG MVEL dur 30 min
 
-$ Wave statistics at gauges
-TABLE 'GAUGES' HEADER 'wave_statistics.txt' HSIG SETUP BRKP
+TABLE 'GAUGES' HEADER 'wave_statistics.txt' HSIG 
+
+TABLE 'GAUGES' HEADER 'timeseries.txt' &
+  WATL VEL OUTPUT 000000.000 0.1 SEC
 
 $=============================================================================
 $ RUN
