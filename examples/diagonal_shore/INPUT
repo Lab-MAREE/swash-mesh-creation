@@ -4,7 +4,7 @@ $=============================================================================
 $ MODEL SETUP
 $=============================================================================
 
-SET level={{ depth }} grav=9.81 rhowat=1000.0
+SET level=2.0 grav=9.81 rhowat=1000.0
 
 MODE NONSTATIONARY TWODIMENSIONAL
 
@@ -14,33 +14,23 @@ $=============================================================================
 
 VERTICAL 2
 
-CGRID REGULAR 0.0 0.0 0.0 {{ x_dim }} {{ y_dim }} {{ x_cells }} {{ y_cells }}
+CGRID REGULAR 0.0 0.0 0.0 2000.0 1500.0 200 150
 
 $=============================================================================
 $ BATHYMETRY
 $=============================================================================
 
-INPGRID BOTTOM 0.0 0.0 0.0 {{ x_cells }} {{ y_cells }} {{ x_resolution }} {{ y_resolution }}
+INPGRID BOTTOM 0.0 0.0 0.0 200 150 10.0 10.0
 READINP BOTTOM 1.0 'bathymetry.txt' IDLA=3 FREE
 
-{% if add_breakwaters -%}
-$=============================================================================
-$ BREAKWATER POROSITY
-$=============================================================================
 
-INPGRID POROSITY 0.0 0.0 0.0 {{ x_cells }} {{ y_cells }} {{ x_resolution }} {{ y_resolution }}
-READINP POROSITY 1.0 'porosity.txt' IDLA=3 FREE
-
-POROSITY 1.15 99999 200.0 1.1 6.0
-
-{%- endif %}
 
 $=============================================================================
 $ WAVE GENERATION
 $=============================================================================
 
 BOUND SHAPESPEC JONSWAP 3.3 SIG PEAK DSPR DEGREES
-BOUND SOUTH BTYPE WEAK CON SPECTRUM {{ wave_height }} 6.0 180.0 15.0
+BOUND SOUTH BTYPE WEAK CON SPECTRUM 1.0 6.0 180.0 15.0
 
 $ Sponge layers 
 SPONGELAYER NORTH 10.
@@ -70,4 +60,3 @@ $=============================================================================
 COMPUTE 000000.000 0.05 SEC 000300.000
 
 STOP
-

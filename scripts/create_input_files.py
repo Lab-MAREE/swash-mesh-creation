@@ -201,24 +201,24 @@ def _create_bathymetry(
             [
                 np.tile(
                     np.linspace(
-                        depth, 0, math.ceil(n_cells[1] / 5 * 4)
+                        depth, 0, math.ceil((n_cells[1] + 1) / 5 * 4)
                     ).reshape(-1, 1),
-                    (1, n_cells[0]),
+                    (1, n_cells[0] + 1),
                 ),
                 np.tile(
-                    np.linspace(0, -elevation, math.ceil(n_cells[1] / 5) + 1)[
-                        1:
-                    ].reshape(
+                    np.linspace(
+                        0, -elevation, math.ceil((n_cells[1] + 1) / 5)
+                    )[1:].reshape(
                         -1, 1
                     ),  # remove the repeated 0 line
-                    (1, n_cells[0]),
+                    (1, n_cells[0] + 1),
                 ),
             ]
         )
     elif shape == "d":
         shore_point = math.floor(min(n_cells) / 5)
         dist_top_left_to_shore = 2 * shore_point
-        dist_bottom_right_to_shore = 2 * (max(n_cells) - shore_point)
+        dist_bottom_right_to_shore = 2 * (max(n_cells) + 1 - shore_point)
         return np.array(
             [
                 [
@@ -230,9 +230,9 @@ def _create_bathymetry(
                         * ((i - shore_point) + (j - shore_point))
                         / dist_bottom_right_to_shore
                     )
-                    for j in range(n_cells[1])
+                    for j in range(n_cells[0] + 1)
                 ]
-                for i in range(n_cells[0] - 1, -1, -1)
+                for i in range(n_cells[1], -1, -1)
             ]
         )
     else:

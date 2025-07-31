@@ -1,13 +1,10 @@
-$ SWASH Input File - 2D Coast Experiment
-$ dev
-
-PROJECT 'Baie-des-Bacon' '736'
+PROJECT 'example' '01'
 
 $=============================================================================
 $ MODEL SETUP
 $=============================================================================
 
-SET level=6.0 grav=9.81 rhowat=1000.0
+SET level=2.0 grav=9.81 rhowat=1000.0
 
 MODE NONSTATIONARY TWODIMENSIONAL
 
@@ -23,14 +20,14 @@ $=============================================================================
 $ BATHYMETRY
 $=============================================================================
 
-INPGRID BOTTOM 0.0 0.0 0. 200 150 10.0 10.0
+INPGRID BOTTOM 0.0 0.0 0.0 200 150 10.0 10.0
 READINP BOTTOM 1.0 'bathymetry.txt' IDLA=3 FREE
 
 $=============================================================================
 $ BREAKWATER POROSITY
 $=============================================================================
 
-INPGRID POROSITY 0.0 0.0 0. 200 150 10.0 10.0
+INPGRID POROSITY 0.0 0.0 0.0 200 150 10.0 10.0
 READINP POROSITY 1.0 'porosity.txt' IDLA=3 FREE
 
 POROSITY 1.15 99999 200.0 1.1 6.0
@@ -40,7 +37,7 @@ $ WAVE GENERATION
 $=============================================================================
 
 BOUND SHAPESPEC JONSWAP 3.3 SIG PEAK DSPR DEGREES
-BOUND SOUTH BTYPE WEAK CON SPECTRUM 2.0 6.0 180.0 15.0
+BOUND SOUTH BTYPE WEAK CON SPECTRUM 1.0 6.0 180.0 15.0
 
 $ Sponge layers 
 SPONGELAYER NORTH 10.
@@ -61,14 +58,7 @@ $=============================================================================
 $ OUTPUT
 $=============================================================================
 
-POINTS 'GAUGES' FILE 'gauge_positions.txt'
-
-QUANTITY HSIG MVEL dur 30 min
-
-TABLE 'GAUGES' HEADER 'wave_statistics.txt' HSIG 
-
-TABLE 'GAUGES' HEADER 'timeseries.txt' &
-  WATL VEL OUTPUT 000000.000 0.1 SEC
+BLOCK 'COMPGRID' HEADER 'wave_field.txt' WATLEV OUTPUT 000000.000 0.05 SEC
 
 $=============================================================================
 $ RUN
