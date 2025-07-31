@@ -62,7 +62,7 @@ template = {
 def main() -> None:
     dimensions = (2000.0, 1500.0)
     resolution = (10.0, 10.0)
-    breakwater_height = 3.5
+    breakwater_height = 1.0
 
     args = _parse_args()
     _create_input_files(
@@ -149,10 +149,10 @@ def _create_input_files(
         n_cells,
     )
     bathymetry = _create_bathymetry(shape, depth, elevation, n_cells)
-    shoreline = _extract_shoreline(bathymetry, resolution)
+    shoreline = _extract_shoreline(bathymetry)
     if add_breakwaters:
         bathymetry, porosity = _add_breakwaters(
-            bathymetry, shape, breakwater_height
+            bathymetry, shape, shoreline, resolution, breakwater_height
         )
     else:
         porosity = None
@@ -242,15 +242,18 @@ def _create_bathymetry(
 def _add_breakwaters(
     bathymetry: np.ndarray,
     shape: Literal["s", "d"],
+    shoreline: list[tuple[int, int]],
+    resolution: tuple[float, float],
     breakwater_height: float,
 ) -> tuple[np.ndarray, np.ndarray]:
     n_cells = (bathymetry.shape[1], bathymetry.shape[0])
     if shape == "s":
         porosity = np.ones_like(bathymetry)
-        shoreline = np.arange(n_cells[1])[bathymetry[:, 0] == 0][0]
         length = math.ceil(n_cells[0] / 10)
         space_between = math.floor(n_cells[0] - 5 * length) / 6
-        y_position = math.ceil(shoreline * 2 / 3)
+        y_position = math.ceil(
+            np.arange(n_cells[1])[bathymetry[:, 0] == 0][0] * 2 / 3
+        )
         for i in range(5):
             x_position = math.ceil(space_between * (1 + i) + length * i)
             bathymetry[
@@ -281,7 +284,127 @@ def _add_breakwaters(
             ] = 0.4
         return bathymetry, porosity
     elif shape == "d":
-        pass
+        porosity = np.ones_like(bathymetry)
+        length = math.ceil(len(shoreline) / 10)
+        space_between = math.floor(len(shoreline) - 5 * length) / 6
+        breakwater_distance = math.floor(
+            min(shoreline[0][1], n_cells[0] - shoreline[-1][0]) * 1 / 3
+        )
+        x_distance = math.floor(
+            breakwater_distance / max(n_cells) * n_cells[0]
+        )
+        y_distance = math.floor(
+            breakwater_distance / max(n_cells) * n_cells[1]
+        )
+        for i in range(5):
+            for point in shoreline[
+                math.ceil(space_between * (1 + i) + length * i) : math.ceil(
+                    space_between * (1 + i) + length * i
+                )
+                + length
+            ]:
+                bathymetry[
+                    point[1] - y_distance,
+                    point[0] + x_distance,
+                ] -= breakwater_height
+                bathymetry[
+                    point[1] - y_distance - 1,
+                    point[0] + x_distance + 1,
+                ] -= breakwater_height
+                bathymetry[
+                    point[1] - y_distance + 1,
+                    point[0] + x_distance - 1,
+                ] -= breakwater_height
+                bathymetry[
+                    point[1] - y_distance + 2,
+                    point[0] + x_distance - 2,
+                ] -= (
+                    breakwater_height / 2
+                )
+                bathymetry[
+                    point[1] - y_distance - 2,
+                    point[0] + x_distance + 2,
+                ] -= (
+                    breakwater_height / 2
+                )
+                porosity[
+                    point[1] - breakwater_distance,
+                    point[0] + breakwater_distance,
+                ] = 0.4
+                porosity[
+                    point[1] - breakwater_distance - 1,
+                    point[0] + breakwater_distance + 1,
+                ] = 0.4
+                porosity[
+                    point[1] - breakwater_distance + 1,
+                    point[0] + breakwater_distance - 1,
+                ] = 0.4
+                porosity[
+                    point[1] - y_distance + 2,
+                    point[0] + x_distance - 2,
+                ] = 0.4
+                porosity[
+                    point[1] - y_distance - 2,
+                    point[0] + x_distance + 2,
+                ] = 0.4
+            for point in (
+                shoreline[math.ceil(space_between * (1 + i) + length * i) - 1],
+                shoreline[
+                    math.ceil(space_between * (1 + i) + length * i) + length
+                ],
+            ):
+                bathymetry[
+                    point[1] - y_distance,
+                    point[0] + x_distance,
+                ] -= (
+                    breakwater_height / 2
+                )
+                bathymetry[
+                    point[1] - y_distance - 1,
+                    point[0] + x_distance + 1,
+                ] -= (
+                    breakwater_height / 2
+                )
+                bathymetry[
+                    point[1] - y_distance + 1,
+                    point[0] + x_distance - 1,
+                ] -= (
+                    breakwater_height / 2
+                )
+                bathymetry[
+                    point[1] - y_distance + 2,
+                    point[0] + x_distance - 2,
+                ] -= (
+                    breakwater_height / 2
+                )
+                bathymetry[
+                    point[1] - y_distance - 2,
+                    point[0] + x_distance + 2,
+                ] -= (
+                    breakwater_height / 2
+                )
+                porosity[
+                    point[1] - breakwater_distance,
+                    point[0] + breakwater_distance,
+                ] = 0.4
+                porosity[
+                    point[1] - breakwater_distance - 1,
+                    point[0] + breakwater_distance + 1,
+                ] = 0.4
+                porosity[
+                    point[1] - breakwater_distance + 1,
+                    point[0] + breakwater_distance - 1,
+                ] = 0.4
+                porosity[
+                    point[1] - y_distance + 2,
+                    point[0] + x_distance - 2,
+                ] = 0.4
+                porosity[
+                    point[1] - y_distance - 2,
+                    point[0] + x_distance + 2,
+                ] = 0.4
+
+        return bathymetry, porosity
     else:
         assert_never(shape)
 
@@ -289,13 +412,13 @@ def _add_breakwaters(
 def _create_diagram(
     bathymetry: np.ndarray,
     resolution: tuple[float, float],
-    shoreline: list[tuple[float, float]],
+    shoreline: list[tuple[int, int]],
 ) -> go.Figure:
     x = np.arange(0, (bathymetry.shape[1] + 1) * resolution[0], resolution[0])
     y = np.arange(0, (bathymetry.shape[0] + 1) * resolution[1], resolution[1])
 
     depth = bathymetry.max()
-    elevation = max(bathymetry.min(), -1)
+    elevation = bathymetry.min()
 
     return go.Figure(
         [
@@ -308,7 +431,7 @@ def _create_diagram(
                 hoverinfo="skip",
                 line_width=0,
                 colorscale=[
-                    (0, "#f9e2af"),
+                    (0, "#efb02a"),
                     ((0 - elevation) / (depth - elevation) - 0.05, "#f9e2af"),
                     ((0 - elevation) / (depth - elevation), "#a3bfe9"),
                     (1, "#0d2a59"),
@@ -318,8 +441,8 @@ def _create_diagram(
                 },
             ),
             go.Scatter(
-                x=[x[0] for x in shoreline],
-                y=[x[1] for x in shoreline],
+                x=[x[0] * resolution[0] for x in shoreline],
+                y=[x[1] * resolution[1] for x in shoreline],
                 mode="lines",
                 name="Shoreline",
                 hoverinfo="skip",
@@ -352,12 +475,10 @@ def _create_diagram(
     )
 
 
-def _extract_shoreline(
-    bathymetry: np.ndarray, resolution: tuple[float, float]
-) -> list[tuple[float, float]]:
+def _extract_shoreline(bathymetry: np.ndarray) -> list[tuple[int, int]]:
     return sorted(
         [
-            (j * resolution[1], i * resolution[0])
+            (j, i)
             for i in range(bathymetry.shape[0])
             for j in range(bathymetry.shape[1])
             if bathymetry[i, j] == 0
