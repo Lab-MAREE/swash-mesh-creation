@@ -17,7 +17,9 @@ mesh.msh
 mesh.node
 norm_end
 swashinit
+times.txt
 wave_field.mat
+wave_field.txt
 
 /scripts/diagram.png
 /scripts/bathymetry.txt
