@@ -64,7 +64,18 @@ def main() -> None:
     np.save(path / "times.npy", times)
     np.save(path / "wave_field.npy", wave_field)
 
-    fig = _create_animation(times, wave_field, time_per_frame=5.0)
+    bathymetry = np.loadtxt(path / "bathymetry.txt")
+    resolution = _extract_resolution(path)
+    shoreline = _extract_shoreline(bathymetry)
+
+    fig = _create_animation(
+        bathymetry,
+        resolution,
+        shoreline,
+        times,
+        wave_field,
+        time_per_frame=5.0,
+    )
     fig.write_html(path / "water_level_animation.html")
 
 
@@ -100,115 +111,216 @@ def _parse_time(time: str) -> float:
     return int(time[:2]) * 3600 + int(time[2:4]) * 60 + float(time[4:])
 
 
+def _extract_resolution(path: Path) -> tuple[float, float]:
+    with open(path / "INPUT") as f:
+        for line in f:
+            if line.startswith("INPGRID BOTTOM"):
+                line_ = line.split()
+                x_resolution = float(line_[7])
+                y_resolution = float(line_[8])
+                return (x_resolution, y_resolution)
+    raise RuntimeError("Couldn't find resolution in INPUT file.")
+
+
+def _extract_shoreline(bathymetry: np.ndarray) -> list[tuple[int, int]]:
+    return sorted(
+        [
+            (j, i)
+            for i in range(bathymetry.shape[0])
+            for j in range(bathymetry.shape[1])
+            if bathymetry[i, j] == 0
+        ]
+    )
+
+
 def _create_animation(
-    times: np.ndarray, wave_field: np.ndarray, time_per_frame: float = 5.0
+    bathymetry: np.ndarray,
+    resolution: tuple[float, float],
+    shoreline: list[tuple[int, int]],
+    times: np.ndarray,
+    wave_field: np.ndarray,
+    *,
+    time_per_frame: float = 5.0,
 ) -> go.Figure:
-    # Flip the wave field vertically to match SWASH coordinate system
-    # SWASH uses lower-left origin, but plotly heatmap uses upper-left
-    wave_field_flipped = np.flip(wave_field, axis=1)
-    
-    # Group timesteps into frames of time_per_frame seconds
-    frame_indices = []
-    current_frame_start = 0
-    
-    for i in range(len(times)):
-        if times[i] - times[current_frame_start] >= time_per_frame:
-            frame_indices.append(i - 1)
-            current_frame_start = i
-    
-    # Add the last frame
-    if len(frame_indices) == 0 or frame_indices[-1] != len(times) - 1:
-        frame_indices.append(len(times) - 1)
-    
-    frames = []
-    for idx in frame_indices:
-        frame = go.Frame(
-            data=[
-                go.Heatmap(
-                    z=wave_field_flipped[idx],
-                    colorscale="Blues",
-                    zmin=wave_field_flipped.min(),
-                    zmax=wave_field_flipped.max(),
-                    colorbar={"title": "Water Level (m)"},
-                )
+    x = np.arange(0, (bathymetry.shape[1] + 1) * resolution[0], resolution[0])
+    y = np.arange(0, (bathymetry.shape[0] + 1) * resolution[1], resolution[1])
+
+    depth = bathymetry.max()
+    elevation = bathymetry.min()
+
+    static_plots = [
+        go.Contour(
+            x=x,
+            y=y,
+            z=np.clip(bathymetry, elevation, None),
+            name="Bathymetry",
+            colorbar_title="Bathymetry (m)",
+            hoverinfo="skip",
+            line_width=0,
+            colorscale=[
+                (0, "#efb02a"),
+                ((0 - elevation) / (depth - elevation) - 0.05, "#f9e2af"),
+                ((0 - elevation) / (depth - elevation), "#a3bfe9"),
+                (1, "#0d2a59"),
             ],
-            name=str(idx),
-            layout={"title": f"Time: {times[idx]:.1f} s"},
+            colorbar={
+                "dtick": 1,
+                "x": 1.02,
+                "xanchor": "left",
+            },
+        ),
+        go.Scatter(
+            x=[x[0] * resolution[0] for x in shoreline],
+            y=[x[1] * resolution[1] for x in shoreline],
+            mode="lines",
+            name="Shoreline",
+            hoverinfo="skip",
+            line={
+                "color": "#fab387",
+                "width": 2,
+            },
+        ),
+    ]
+
+    frame_indices: list[int] = [0]
+    for i in range(1, times.shape[0]):
+        if times[i] - times[frame_indices[-1]] >= time_per_frame:
+            frame_indices.append(i)
+    frame_indices.append(times.shape[0] - 1)
+
+    frames = [
+        go.Heatmap(
+            x=x,
+            y=y,
+            z=np.flip(
+                wave_field[i], axis=0
+            ),  # heatmap y axis goes from top to bottom
+            colorscale=[
+                [0.0, "rgba(240, 230, 255, 0.5)"],
+                [
+                    -wave_field.min() / (wave_field.max() - wave_field.min())
+                    - 1e-6,
+                    "rgba(240, 230, 255, 0.25)",
+                ],
+                [
+                    -wave_field.min() / (wave_field.max() - wave_field.min()),
+                    "rgba(0,0,0,0)",
+                ],
+                [
+                    -wave_field.min() / (wave_field.max() - wave_field.min())
+                    + 1e-6,
+                    "rgba(102, 0, 255, 0.25)",
+                ],
+                [1.0, "rgba(102, 0, 255, 0.5)"],
+            ],
+            zmin=wave_field.min(),
+            zmax=wave_field.max(),
+            colorbar={
+                "title": "Water level (m)",
+                "x": 1.3,
+                "xanchor": "left",
+            },
+            zorder=10,
         )
-        frames.append(frame)
+        for i in frame_indices
+    ]
 
-    fig = go.Figure(
-        data=[
-            go.Heatmap(
-                z=wave_field_flipped[0],
-                colorscale="Blues",
-                zmin=wave_field_flipped.min(),
-                zmax=wave_field_flipped.max(),
-                colorbar={"title": "Water Level (m)"},
+    return go.Figure(
+        [
+            frames[0],
+            *static_plots,
+        ],
+        {
+            "template": template,
+            "height": 750,
+            "width": 750,
+            "xaxis": {
+                "title": "X distance (m)",
+                "range": (x[0], x[-1]),
+            },
+            "yaxis": {
+                "title": "Y distance (m)",
+                "range": (y[0], y[-1]),
+            },
+            "showlegend": True,
+            "legend": {
+                "x": 0.99,
+                "y": 0.99,
+                "xanchor": "right",
+                "yanchor": "top",
+            },
+            "updatemenus": [
+                {
+                    "type": "buttons",
+                    "showactive": False,
+                    "x": 0.5,
+                    "xanchor": "center",
+                    "y": 1.02,
+                    "yanchor": "bottom",
+                    "direction": "left",
+                    "pad": {"r": 10, "t": 10},
+                    "buttons": [
+                        {
+                            "label": "Play",
+                            "method": "animate",
+                            "args": [
+                                None,
+                                {
+                                    "frame": {
+                                        "duration": 500,
+                                        "redraw": True,
+                                    },
+                                    "fromcurrent": True,
+                                    "transition": {"duration": 0},
+                                },
+                            ],
+                        },
+                        {
+                            "label": "Pause",
+                            "method": "animate",
+                            "args": [
+                                [None],
+                                {
+                                    "frame": {"duration": 0, "redraw": False},
+                                    "mode": "immediate",
+                                    "transition": {"duration": 0},
+                                },
+                            ],
+                        },
+                    ],
+                }
+            ],
+            "sliders": [
+                {
+                    "active": 0,
+                    "steps": [
+                        {
+                            "label": f"{times[i]:.1f}s",
+                            "method": "animate",
+                            "args": [
+                                [str(i)],
+                                {
+                                    "frame": {"duration": 0, "redraw": True},
+                                    "mode": "immediate",
+                                    "transition": {"duration": 0},
+                                },
+                            ],
+                        }
+                        for i in frame_indices
+                    ],
+                }
+            ],
+        },
+        frames=[
+            go.Frame(
+                data=[frame],
+                name=str(i),
+                layout={"title": f"Time: {times[i]:.1f} s"},
+                traces=[0],
             )
-        ],
-        frames=frames,
-    )
-
-    fig.update_layout(
-        template=template,
-        title="Water Level Animation",
-        xaxis={"title": "X coordinate"},
-        yaxis={"title": "Y coordinate"},
-        updatemenus=[
-            {
-                "type": "buttons",
-                "showactive": False,
-                "buttons": [
-                    {
-                        "label": "Play",
-                        "method": "animate",
-                        "args": [
-                            None,
-                            {
-                                "frame": {"duration": 100, "redraw": True},
-                                "fromcurrent": True,
-                            },
-                        ],
-                    },
-                    {
-                        "label": "Pause",
-                        "method": "animate",
-                        "args": [
-                            [None],
-                            {
-                                "frame": {"duration": 0, "redraw": False},
-                                "mode": "immediate",
-                                "transition": {"duration": 0},
-                            },
-                        ],
-                    },
-                ],
-            }
-        ],
-        sliders=[
-            {
-                "active": 0,
-                "steps": [
-                    {
-                        "label": f"{times[idx]:.1f}s",
-                        "method": "animate",
-                        "args": [
-                            [str(idx)],
-                            {
-                                "frame": {"duration": 0, "redraw": True},
-                                "mode": "immediate",
-                                "transition": {"duration": 0},
-                            },
-                        ],
-                    }
-                    for idx in frame_indices
-                ],
-            }
+            for i, frame in zip(frame_indices, frames, strict=True)
         ],
     )
-
-    return fig
 
 
 if __name__ == "__main__":

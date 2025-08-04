@@ -37,7 +37,7 @@ $ WAVE GENERATION
 $=============================================================================
 
 BOUND SHAPESPEC JONSWAP 3.3 SIG PEAK DSPR DEGREES
-BOUND SOUTH BTYPE WEAK CON SPECTRUM 1.0 6.0 180.0 15.0
+BOUND SOUTH BTYPE WEAK CON SPECTRUM 1.0 6.0 90.0 15.0
 
 $ Sponge layers 
 SPONGELAYER NORTH 10.
@@ -58,12 +58,12 @@ $=============================================================================
 $ OUTPUT
 $=============================================================================
 
-BLOCK 'COMPGRID' NOHEADER 'wave_field.mat' WATLEV OUTPUT 000000.000 0.05 SEC
+BLOCK 'COMPGRID' NOHEADER 'wave_field.mat' WATLEV OUTPUT 000000.000 1.0 SEC
 
 $=============================================================================
 $ RUN
 $=============================================================================
 
-COMPUTE 000000.000 0.05 SEC 000300.000
+COMPUTE 000000.000 1.0 SEC 000900.000
 
 STOP

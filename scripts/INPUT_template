@@ -40,7 +40,7 @@ $ WAVE GENERATION
 $=============================================================================
 
 BOUND SHAPESPEC JONSWAP 3.3 SIG PEAK DSPR DEGREES
-BOUND SOUTH BTYPE WEAK CON SPECTRUM {{ wave_height }} 6.0 180.0 15.0
+BOUND SOUTH BTYPE WEAK CON SPECTRUM {{ wave_height }} 6.0 90.0 15.0
 
 $ Sponge layers 
 SPONGELAYER NORTH 10.
