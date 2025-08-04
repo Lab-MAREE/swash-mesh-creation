@@ -159,7 +159,7 @@ def _create_input_files(
     np.savetxt(path / "bathymetry.txt", bathymetry)
     if porosity is not None:
         np.savetxt(path / "porosity.txt", porosity)
-    diagram = _create_diagram(bathymetry, resolution, shoreline)
+    diagram = _create_diagram(bathymetry, resolution)
     diagram.write_image(path / "diagram.png")
 
 
@@ -410,9 +410,7 @@ def _add_breakwaters(
 
 
 def _create_diagram(
-    bathymetry: np.ndarray,
-    resolution: tuple[float, float],
-    shoreline: list[tuple[int, int]],
+    bathymetry: np.ndarray, resolution: tuple[float, float]
 ) -> go.Figure:
     x = np.arange(0, (bathymetry.shape[1] + 1) * resolution[0], resolution[0])
     y = np.arange(0, (bathymetry.shape[0] + 1) * resolution[1], resolution[1])
@@ -421,37 +419,22 @@ def _create_diagram(
     elevation = bathymetry.min()
 
     return go.Figure(
-        [
-            go.Contour(
-                x=x,
-                y=y,
-                z=np.clip(bathymetry, elevation, None),
-                name="Bathymetry",
-                colorbar_title="Bathymetry",
-                hoverinfo="skip",
-                line_width=0,
-                colorscale=[
-                    (0, "#efb02a"),
-                    ((0 - elevation) / (depth - elevation) - 0.05, "#f9e2af"),
-                    ((0 - elevation) / (depth - elevation), "#a3bfe9"),
-                    (1, "#0d2a59"),
-                ],
-                colorbar={
-                    "dtick": 1,
-                },
-            ),
-            go.Scatter(
-                x=[x[0] * resolution[0] for x in shoreline],
-                y=[x[1] * resolution[1] for x in shoreline],
-                mode="lines",
-                name="Shoreline",
-                hoverinfo="skip",
-                line={
-                    "color": "#fab387",
-                    "width": 2,
-                },
-            ),
-        ],
+        go.Heatmap(
+            x=x,
+            y=y,
+            z=bathymetry,
+            name="Bathymetry",
+            colorbar_title="Bathymetry",
+            colorscale=[
+                (0, "#efb02a"),
+                ((0 - elevation) / (depth - elevation) - 0.05, "#f9e2af"),
+                ((0 - elevation) / (depth - elevation), "#a3bfe9"),
+                (1, "#0d2a59"),
+            ],
+            colorbar={
+                "dtick": 1,
+            },
+        ),
         {
             "template": template,
             "height": 750,
@@ -463,13 +446,6 @@ def _create_diagram(
             "yaxis": {
                 "title": "Y distance (m)",
                 "range": (y[0], y[-1]),
-            },
-            "showlegend": True,
-            "legend": {
-                "x": 0.99,
-                "y": 0.99,
-                "xanchor": "right",
-                "yanchor": "top",
             },
         },
     )
