@@ -19,7 +19,9 @@ norm_end
 swashinit
 times.txt
 wave_field.mat
-wave_field.txt
+wave_field.npy
+times.npy
+water_level_animation.html
 
 /scripts/diagram.png
 /scripts/bathymetry.txt
