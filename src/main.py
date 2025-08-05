@@ -17,10 +17,12 @@ def create_mesh(swash_dir: Path) -> None:
     )
 
     bathymetry, porosity, resolution, wavelength = swash.read_params(swash_dir)
-    gauge_positions = swash.read_gauge_positions(swash_dir)
 
     mesh.create_mesh(
-        bathymetry, resolution, gauge_positions, porosity=porosity
+        bathymetry,
+        resolution,
+        porosity=porosity,
+        wavelength=wavelength,
     )
 
 

@@ -1,7 +1,10 @@
+import os
+import tempfile
+
 import gmsh
 import numpy as np
 
-from . import swash, triangle
+from . import triangle
 
 ##########
 # public #
@@ -11,12 +14,11 @@ from . import swash, triangle
 def create_mesh(
     bathymetry: np.ndarray,
     resolution: tuple[float, float],
-    gauge_positions: list[tuple[float, float]],
     *,
     porosity: np.ndarray | None = None,
-    lc_fine: float = 10.0,
-    lc_coarse: float = 50.0,
-    transition_distance: float = 50.0,
+    lc_fine: float = 5.0,
+    lc_coarse: float = 100.0,
+    wavelength: float,
 ) -> None:
     x_resolution, y_resolution = resolution
 
@@ -25,10 +27,10 @@ def create_mesh(
     x_max = (bathymetry.shape[1] - 1) * x_resolution
     y_max = (bathymetry.shape[0] - 1) * y_resolution
 
-    shoreline = swash.extract_shoreline_boundary(bathymetry, resolution)
-    breakwaters = swash.extract_breakwaters(porosity, resolution)
-
-    fine_radius = max(x_resolution, y_resolution) / 2
+    # Create background mesh based on bathymetry
+    background_mesh_file = _create_background_mesh(
+        bathymetry, resolution, wavelength, lc_fine, lc_coarse, porosity
+    )
 
     # initialize gmsh
     gmsh.initialize()
@@ -37,17 +39,12 @@ def create_mesh(
 
     # generate mesh in gmsh format
     _generate_mesh(
-        gauge_positions,
-        shoreline,
-        breakwaters,
+        background_mesh_file,
         x_min,
         y_min,
         x_max,
         y_max,
-        lc_fine=lc_fine,
         lc_coarse=lc_coarse,
-        fine_radius=fine_radius,
-        transition_distance=transition_distance,
     )
 
     # write mesh in format understandable by swash
@@ -58,6 +55,9 @@ def create_mesh(
         y_max,
     )
 
+    # Clean up temporary background mesh file
+    os.unlink(background_mesh_file)
+
 
 ###########
 # private #
@@ -65,18 +65,13 @@ def create_mesh(
 
 
 def _generate_mesh(
-    gauge_positions: list[tuple[float, float]],
-    shoreline: list[tuple[float, float]],
-    breakwaters: list[tuple[float, float]],
+    background_mesh_file: str,
     x_min: float,
     y_min: float,
     x_max: float,
     y_max: float,
     *,
-    lc_fine: float,
     lc_coarse: float,
-    fine_radius: float,
-    transition_distance: float,
 ) -> None:
     # domain corners
     domain_points = [
@@ -99,15 +94,17 @@ def _generate_mesh(
     # synchronize before adding fields
     gmsh.model.geo.synchronize()
 
-    # finer resolution close to important points
-    _adjust_mesh_sizes(
-        # sorted(set([*shoreline, *gauge_positions, *breakwaters])),
-        sorted(set([*gauge_positions, *breakwaters])),
-        lc_fine=lc_fine,
-        lc_coarse=lc_coarse,
-        fine_radius=fine_radius,
-        transition_distance=transition_distance,
-    )
+    # Merge background mesh and set as background field
+    gmsh.merge(background_mesh_file)
+    # The merge creates a post-processing view, we need to use it as background mesh
+    gmsh.model.mesh.field.add("PostView", 1)
+    gmsh.model.mesh.field.setNumber(1, "ViewIndex", 0)
+    gmsh.model.mesh.field.setAsBackgroundMesh(1)
+
+    # Set mesh options to use only background mesh
+    gmsh.option.setNumber("Mesh.MeshSizeExtendFromBoundary", 0)
+    gmsh.option.setNumber("Mesh.MeshSizeFromPoints", 0)
+    gmsh.option.setNumber("Mesh.MeshSizeFromCurvature", 0)
 
     # meshing options
     gmsh.option.setNumber("Mesh.Algorithm", 5)  # delaunay
@@ -118,41 +115,110 @@ def _generate_mesh(
     gmsh.model.mesh.optimize("Netgen")
 
 
-def _adjust_mesh_sizes(
-    points: list[tuple[float, float]],
-    *,
+def _create_background_mesh(
+    bathymetry: np.ndarray,
+    resolution: tuple[float, float],
+    wavelength: float,
     lc_fine: float,
     lc_coarse: float,
-    fine_radius: float,
-    transition_distance: float,
-) -> None:
-    # MathEval field for size control
-    gmsh.option.setNumber("Mesh.MeshSizeExtendFromBoundary", 0)
-    gmsh.option.setNumber("Mesh.MeshSizeFromPoints", 0)
-    gmsh.option.setNumber("Mesh.MeshSizeFromCurvature", 0)
+    porosity: np.ndarray | None = None,
+) -> str:
+    """Create a background mesh based on bathymetry depth.
 
-    field_list: list[int] = []
-    for i, (x, y) in enumerate(points):
-        gmsh.model.mesh.field.add("Ball", i + 1)
-        gmsh.model.mesh.field.setNumber(i + 1, "VIn", lc_fine)
-        gmsh.model.mesh.field.setNumber(i + 1, "VOut", lc_coarse)
-        gmsh.model.mesh.field.setNumber(i + 1, "Radius", fine_radius)
-        gmsh.model.mesh.field.setNumber(i + 1, "XCenter", x)
-        gmsh.model.mesh.field.setNumber(i + 1, "YCenter", y)
-        field_list.append(i + 1)
+    Returns the path to the generated .pos file.
+    """
+    x_resolution, y_resolution = resolution
+    # Find maximum depth, handling cases where all bathymetry might be <= 0
+    water_depths = bathymetry[bathymetry > 0]
+    max_depth = np.max(water_depths) if water_depths.size > 0 else 1.0
 
-    if points:
-        gmsh.model.mesh.field.add("MathEval", len(field_list) + 1)
-        dist_expr = "1e10"
-        for x, y in points:
-            dist_expr = f"min({dist_expr}, sqrt((x-{x})^2 + (y-{y})^2))"
-        size_expr = f"{lc_fine} + ({lc_coarse}-{lc_fine}) * min(1.0, max(0.0, ({dist_expr}-{fine_radius})/({transition_distance}-{fine_radius})))"
-        gmsh.model.mesh.field.setString(len(field_list) + 1, "F", size_expr)
-        field_list.append(len(field_list) + 1)
+    # Calculate distance from shoreline for land points
+    shoreline_distances = _calculate_shoreline_distances(
+        bathymetry, resolution
+    )
 
-    # Create minimum field
-    if field_list:
-        gmsh.model.mesh.field.setAsBackgroundMesh(field_list[-1])
+    # Identify breakwater locations if porosity data exists
+    is_breakwater = np.zeros_like(bathymetry, dtype=bool)
+    if porosity is not None:
+        is_breakwater = porosity != 1
+
+    # Create temporary file for background mesh
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".pos", delete=False
+    ) as f:
+        f.write('View "background mesh" {\n')
+
+        # Process each grid point
+        point_count = 0
+        for j in range(bathymetry.shape[0]):
+            for i in range(bathymetry.shape[1]):
+                x = i * x_resolution
+                y = j * y_resolution
+                depth = bathymetry[j, i]
+
+                # Breakwaters get fine resolution
+                if is_breakwater[j, i]:
+                    size = lc_fine
+                elif depth <= 0:  # Land or shoreline
+                    distance = shoreline_distances[j, i]
+                    if distance < wavelength:
+                        size = lc_fine
+                    else:
+                        size = lc_coarse
+                else:  # Water
+                    # Normalize depth to [0, 1] range
+                    depth_ratio = min(depth / max_depth, 1.0)
+                    size = lc_fine + (lc_coarse - lc_fine) * depth_ratio
+
+                # Ensure size is a valid float
+                if not np.isfinite(size):
+                    size = lc_coarse
+
+                # Write with explicit formatting to avoid locale issues
+                f.write(f"SP({x:.6f},{y:.6f},0){{{size:.6f}}};\n")
+                point_count += 1
+
+        f.write("};\n")
+        f.flush()
+        return f.name
+
+
+def _calculate_shoreline_distances(
+    bathymetry: np.ndarray, resolution: tuple[float, float]
+) -> np.ndarray:
+    """Calculate distance from each land point to nearest shoreline."""
+    x_resolution, y_resolution = resolution
+
+    # Create binary mask: 1 for water, 0 for land
+    water_mask = (bathymetry > 0).astype(float)
+
+    # Find shoreline pixels (water adjacent to land)
+    # Use gradient to find boundaries
+    grad_x = np.abs(np.gradient(water_mask, axis=1))
+    grad_y = np.abs(np.gradient(water_mask, axis=0))
+    shoreline_mask = ((grad_x + grad_y) > 0) & (bathymetry <= 0)
+
+    # Calculate distance from each land point to nearest shoreline
+    # Initialize with large values
+    distances = np.full_like(bathymetry, 1e10)
+
+    # Set shoreline points to 0 distance
+    distances[shoreline_mask] = 0
+
+    # For land points, calculate minimum distance to shoreline
+    shoreline_points = np.array(np.where(shoreline_mask)).T
+    if len(shoreline_points) > 0:
+        for j in range(bathymetry.shape[0]):
+            for i in range(bathymetry.shape[1]):
+                if bathymetry[j, i] <= 0 and not shoreline_mask[j, i]:
+                    # Calculate distances to all shoreline points
+                    dists = np.sqrt(
+                        ((shoreline_points[:, 0] - j) * y_resolution) ** 2
+                        + ((shoreline_points[:, 1] - i) * x_resolution) ** 2
+                    )
+                    distances[j, i] = np.min(dists)
+
+    return distances
 
 
 def _write_mesh(
