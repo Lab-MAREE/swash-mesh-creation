@@ -61,7 +61,8 @@ $=============================================================================
 $ OUTPUT
 $=============================================================================
 
-BLOCK 'COMPGRID' NOHEADER 'wave_field.mat' WATLEV OUTPUT 000000.000 0.5 SEC
+FRAME 'OUTGRID' 0.0 0.0 0.0 {{ x_dim }} {{ y_dim }} {{ x_cells }} {{ y_cells }}
+BLOCK 'OUTGRID' NOHEADER 'wave_field.mat' LAY-OUT 3 WATLEV OUTPUT 000000.000 0.5 SEC
 
 $=============================================================================
 $ RUN

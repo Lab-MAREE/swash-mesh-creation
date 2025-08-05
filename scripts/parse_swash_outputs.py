@@ -3,6 +3,7 @@ from pathlib import Path
 
 import numpy as np
 import plotly.graph_objects as go
+import scipy.interpolate
 import scipy.io
 
 template = {
@@ -60,13 +61,16 @@ template = {
 def main() -> None:
     args = _parse_args()
     path = Path(args.path)
-    times, wave_field = _read_wave_field(path)
-    np.save(path / "times.npy", times)
-    np.save(path / "wave_field.npy", wave_field)
 
     bathymetry = np.loadtxt(path / "bathymetry.txt")
     resolution = _extract_resolution(path)
     shoreline = _extract_shoreline(bathymetry)
+
+    n_cells = (bathymetry.shape[1], bathymetry.shape[0])
+
+    times, wave_field = _read_wave_field(path, n_cells, resolution)
+    np.save(path / "times.npy", times)
+    np.save(path / "wave_field.npy", wave_field)
 
     fig = _create_animation(
         bathymetry,
@@ -85,7 +89,9 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _read_wave_field(path: Path) -> tuple[np.ndarray, np.ndarray]:
+def _read_wave_field(
+    path: Path, n_cells: tuple[int, int], resolution: tuple[float, float]
+) -> tuple[np.ndarray, np.ndarray]:
     path = path / "wave_field.mat"
     if not path.exists():
         print(
@@ -95,7 +101,7 @@ def _read_wave_field(path: Path) -> tuple[np.ndarray, np.ndarray]:
         )
     _data = scipy.io.loadmat(path)
     data = [
-        (_parse_time(key), np.flip(val, 0))
+        (_parse_time(key), val)
         for key, val in _data.items()
         if key.startswith("Watlev")
     ]
