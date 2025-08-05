@@ -27,15 +27,6 @@ def read_params(
     return bathymetry, porosity, (x_resolution, y_resolution), wavelength_
 
 
-def read_gauge_positions(swash_dir: Path) -> list[tuple[float, float]]:
-    return [
-        (x, y)
-        for x, y in np.loadtxt(swash_dir / "gauge_positions.txt")
-        .astype(np.float64)
-        .tolist()
-    ]
-
-
 def extract_shoreline_boundary(
     bathymetry: np.ndarray, resolution: tuple[float, float]
 ) -> list[tuple[float, float]]:
