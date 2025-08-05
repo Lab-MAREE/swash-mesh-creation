@@ -225,7 +225,7 @@ def _create_bathymetry(
                     (
                         -elevation
                         + elevation * (i + j) / dist_top_left_to_shore
-                        if max(i, j) <= shore_point
+                        if (i + j) <= 2 * shore_point
                         else depth
                         * ((i - shore_point) + (j - shore_point))
                         / dist_bottom_right_to_shore
@@ -247,6 +247,7 @@ def _add_breakwaters(
     breakwater_height: float,
 ) -> tuple[np.ndarray, np.ndarray]:
     n_cells = (bathymetry.shape[1], bathymetry.shape[0])
+    breakwater_porosity = 0.4
     if shape == "s":
         porosity = np.ones_like(bathymetry)
         length = math.ceil(n_cells[0] / 10)
@@ -281,7 +282,7 @@ def _add_breakwaters(
             porosity[
                 y_position - 1 : y_position + 2,
                 x_position - 1 : x_position + 1,
-            ] = 0.4
+            ] = breakwater_porosity
         return bathymetry, porosity
     elif shape == "d":
         porosity = np.ones_like(bathymetry)
@@ -290,119 +291,50 @@ def _add_breakwaters(
         breakwater_distance = math.floor(
             min(shoreline[0][1], n_cells[0] - shoreline[-1][0]) * 1 / 3
         )
-        x_distance = math.floor(
-            breakwater_distance / max(n_cells) * n_cells[0]
-        )
-        y_distance = math.floor(
-            breakwater_distance / max(n_cells) * n_cells[1]
-        )
+        # For diagonal shore, breakwaters are perpendicular (45 degrees)
+        # so we use equal x and y distances
+        offset = math.floor(breakwater_distance / math.sqrt(2))
+
         for i in range(5):
-            for point in shoreline[
-                math.ceil(space_between * (1 + i) + length * i) : math.ceil(
-                    space_between * (1 + i) + length * i
-                )
-                + length
-            ]:
-                bathymetry[
-                    point[1] - y_distance,
-                    point[0] + x_distance,
-                ] -= breakwater_height
-                bathymetry[
-                    point[1] - y_distance - 1,
-                    point[0] + x_distance + 1,
-                ] -= breakwater_height
-                bathymetry[
-                    point[1] - y_distance + 1,
-                    point[0] + x_distance - 1,
-                ] -= breakwater_height
-                bathymetry[
-                    point[1] - y_distance + 2,
-                    point[0] + x_distance - 2,
-                ] -= (
-                    breakwater_height / 2
-                )
-                bathymetry[
-                    point[1] - y_distance - 2,
-                    point[0] + x_distance + 2,
-                ] -= (
-                    breakwater_height / 2
-                )
-                porosity[
-                    point[1] - breakwater_distance,
-                    point[0] + breakwater_distance,
-                ] = 0.4
-                porosity[
-                    point[1] - breakwater_distance - 1,
-                    point[0] + breakwater_distance + 1,
-                ] = 0.4
-                porosity[
-                    point[1] - breakwater_distance + 1,
-                    point[0] + breakwater_distance - 1,
-                ] = 0.4
-                porosity[
-                    point[1] - y_distance + 2,
-                    point[0] + x_distance - 2,
-                ] = 0.4
-                porosity[
-                    point[1] - y_distance - 2,
-                    point[0] + x_distance + 2,
-                ] = 0.4
-            for point in (
-                shoreline[math.ceil(space_between * (1 + i) + length * i) - 1],
-                shoreline[
-                    math.ceil(space_between * (1 + i) + length * i) + length
-                ],
-            ):
-                bathymetry[
-                    point[1] - y_distance,
-                    point[0] + x_distance,
-                ] -= (
-                    breakwater_height / 2
-                )
-                bathymetry[
-                    point[1] - y_distance - 1,
-                    point[0] + x_distance + 1,
-                ] -= (
-                    breakwater_height / 2
-                )
-                bathymetry[
-                    point[1] - y_distance + 1,
-                    point[0] + x_distance - 1,
-                ] -= (
-                    breakwater_height / 2
-                )
-                bathymetry[
-                    point[1] - y_distance + 2,
-                    point[0] + x_distance - 2,
-                ] -= (
-                    breakwater_height / 2
-                )
-                bathymetry[
-                    point[1] - y_distance - 2,
-                    point[0] + x_distance + 2,
-                ] -= (
-                    breakwater_height / 2
-                )
-                porosity[
-                    point[1] - breakwater_distance,
-                    point[0] + breakwater_distance,
-                ] = 0.4
-                porosity[
-                    point[1] - breakwater_distance - 1,
-                    point[0] + breakwater_distance + 1,
-                ] = 0.4
-                porosity[
-                    point[1] - breakwater_distance + 1,
-                    point[0] + breakwater_distance - 1,
-                ] = 0.4
-                porosity[
-                    point[1] - y_distance + 2,
-                    point[0] + x_distance - 2,
-                ] = 0.4
-                porosity[
-                    point[1] - y_distance - 2,
-                    point[0] + x_distance + 2,
-                ] = 0.4
+            # Get the segment of shoreline for this breakwater
+            start_idx = math.ceil(space_between * (1 + i) + length * i)
+            end_idx = start_idx + length
+            segment = shoreline[start_idx:end_idx]
+
+            # Create a continuous breakwater along this segment
+            for j, point in enumerate(segment):
+                # Main breakwater body
+                x_pos = point[0] + offset
+                y_pos = point[1] - offset
+
+                # Ensure we're within bounds
+                if 0 <= x_pos < n_cells[0] and 0 <= y_pos < n_cells[1]:
+                    # Create a 3x3 breakwater core at each point
+                    for dx in range(-1, 2):
+                        for dy in range(-1, 2):
+                            if (
+                                0 <= x_pos + dx < n_cells[0]
+                                and 0 <= y_pos + dy < n_cells[1]
+                            ):
+                                bathymetry[
+                                    y_pos + dy, x_pos + dx
+                                ] -= breakwater_height
+                                porosity[y_pos + dy, x_pos + dx] = (
+                                    breakwater_porosity
+                                )
+
+                    # Add tapering at the edges of each breakwater
+                    if j == 0 or j == len(segment) - 1:
+                        # Reduce height at edges for smooth transition
+                        for dx in range(-1, 2):
+                            for dy in range(-1, 2):
+                                if (abs(dx) == 1 or abs(dy) == 1) and (
+                                    0 <= x_pos + dx < n_cells[0]
+                                    and 0 <= y_pos + dy < n_cells[1]
+                                ):
+                                    bathymetry[y_pos + dy, x_pos + dx] -= (
+                                        breakwater_height / 2
+                                    )
 
         return bathymetry, porosity
     else:

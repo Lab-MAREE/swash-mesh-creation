@@ -74,7 +74,7 @@ def main() -> None:
         shoreline,
         times,
         wave_field,
-        time_per_frame=5.0,
+        time_per_frame=10.0,
     )
     fig.write_html(path / "water_level_animation.html")
 
@@ -144,10 +144,11 @@ def _create_animation(
 ) -> go.Figure:
     x = np.arange(0, (bathymetry.shape[1] + 1) * resolution[0], resolution[0])
     y = np.arange(0, (bathymetry.shape[0] + 1) * resolution[1], resolution[1])
-    bathymetry = wave_field + np.expand_dims(bathymetry, 0)
 
     depth = bathymetry.max()
     elevation = bathymetry.min()
+    # make the waves clearer by scaling the wave field
+    bathymetry = wave_field * 3 + np.expand_dims(bathymetry, 0)
 
     frame_indices: list[int] = [0]
     for i in range(1, times.shape[0]):
