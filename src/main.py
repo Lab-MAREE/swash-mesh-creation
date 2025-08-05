@@ -8,7 +8,13 @@ from . import mesh, swash
 ##########
 
 
-def create_mesh(swash_dir: Path) -> None:
+def create_mesh(
+    swash_dir: Path,
+    *,
+    lc_fine: float,
+    lc_coarse: float,
+    interpolation: int = 1,
+) -> None:
     _verify_file_existence(
         [
             swash_dir / "INPUT",
@@ -21,8 +27,11 @@ def create_mesh(swash_dir: Path) -> None:
     mesh.create_mesh(
         bathymetry,
         resolution,
-        porosity=porosity,
+        lc_fine=lc_fine,
+        lc_coarse=lc_coarse,
         wavelength=wavelength,
+        interpolation=interpolation,
+        porosity=porosity,
     )
 
 
@@ -37,9 +46,6 @@ def apply_mesh(swash_dir: Path) -> None:
     )
 
     shutil.copy(swash_dir / "INPUT", swash_dir / "INPUT.bkp")
-    shutil.copy(swash_dir / "bathymetry.txt", swash_dir / "bathymetry.txt.bkp")
-    if (swash_dir / "porosity.txt").exists():
-        shutil.copy(swash_dir / "porosity.txt", swash_dir / "porosity.txt.bkp")
 
     swash.apply_mesh_to_input_files(swash_dir)
 

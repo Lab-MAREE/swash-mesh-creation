@@ -15,10 +15,11 @@ def create_mesh(
     bathymetry: np.ndarray,
     resolution: tuple[float, float],
     *,
-    porosity: np.ndarray | None = None,
-    lc_fine: float = 5.0,
-    lc_coarse: float = 100.0,
+    lc_fine: float,
+    lc_coarse: float,
     wavelength: float,
+    interpolation: int,
+    porosity: np.ndarray | None = None,
 ) -> None:
     x_resolution, y_resolution = resolution
 
@@ -29,7 +30,13 @@ def create_mesh(
 
     # Create background mesh based on bathymetry
     background_mesh_file = _create_background_mesh(
-        bathymetry, resolution, wavelength, lc_fine, lc_coarse, porosity
+        bathymetry,
+        resolution,
+        wavelength,
+        lc_fine,
+        lc_coarse,
+        porosity,
+        interpolation,
     )
 
     # initialize gmsh
@@ -122,6 +129,7 @@ def _create_background_mesh(
     lc_fine: float,
     lc_coarse: float,
     porosity: np.ndarray | None = None,
+    interpolation: int = 1,
 ) -> str:
     """Create a background mesh based on bathymetry depth.
 
@@ -168,7 +176,11 @@ def _create_background_mesh(
                 else:  # Water
                     # Normalize depth to [0, 1] range
                     depth_ratio = min(depth / max_depth, 1.0)
-                    size = lc_fine + (lc_coarse - lc_fine) * depth_ratio
+
+                    # Apply selected interpolation method
+                    size = lc_fine + (lc_coarse - lc_fine) * depth_ratio ** (
+                        1 / interpolation
+                    )
 
                 # Ensure size is a valid float
                 if not np.isfinite(size):
