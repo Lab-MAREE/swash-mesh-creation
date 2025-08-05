@@ -33,20 +33,8 @@ packages = [
 [dependency-groups]
 dev = [
     "black>=25.1.0",
-    "httpx>=0.28.1",
-    "ipykernel>=6.29.5",
     "isort>=6.0.1",
-    "kaleido>=1.0.0",
-    "nbformat>=5.10.4",
-    "openpyxl>=3.1.5",
-    "plotly>=6.2.0",
-    "pytest>=8.4.0",
-    "pytest-asyncio>=1.0.0",
-    "pytest-cov>=6.1.1",
-    "pytest-mock>=3.14.1",
-    "pytest-timeout>=2.4.0",
     "ruff>=0.11.12",
-    "scipy>=1.16.0",
     "ty>=0.0.1a8",
 ]
 
@@ -56,20 +44,4 @@ target-version = ['py313']
 
 [tool.isort]
 profile = "black"
-src_paths = ["src", "tests"]
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-filterwarnings = [
-  "ignore::DeprecationWarning",
-  "ignore::FutureWarning",
-  "ignore::UserWarning",
-]
-timeout = 60
-
-[tool.coverage.paths]
-source = ["src"]
-
-[tool.coverage.run]
-branch = true
-source = ["src"]
+src_paths = ["src"]
