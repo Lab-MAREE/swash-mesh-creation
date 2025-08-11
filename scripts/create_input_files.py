@@ -131,6 +131,7 @@ def _create_input_files(
     resolution: tuple[float, float],
     breakwater_height: float,
 ) -> None:
+    path.mkdir(exist_ok=True, parents=True)
     n_cells = (
         math.ceil(dimensions[0] / resolution[0]),
         math.ceil(dimensions[1] / resolution[1]),

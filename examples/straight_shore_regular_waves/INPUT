@@ -23,21 +23,13 @@ $=============================================================================
 INPGRID BOTTOM 0.0 0.0 0.0 200 150 10.0 10.0
 READINP BOTTOM 1.0 'bathymetry.txt' IDLA=3 FREE
 
-$=============================================================================
-$ BREAKWATER POROSITY
-$=============================================================================
 
-INPGRID POROSITY 0.0 0.0 0.0 200 150 10.0 10.0
-READINP POROSITY 1.0 'porosity.txt' IDLA=3 FREE
-
-POROSITY 1.15 99999 200.0 1.1 6.0
 
 $=============================================================================
 $ WAVE GENERATION
 $=============================================================================
 
-BOUND SHAPESPEC JONSWAP 3.3 SIG PEAK DSPR DEGREES
-BOUND SOUTH BTYPE WEAK CON SPECTRUM 1.0 6.0 90.0 15.0
+BOUND SOUTH BTYPE WEAK CON REGULAR 1.0 6.0 90.0
 
 $ Sponge layers 
 SPONGELAYER NORTH 10.
