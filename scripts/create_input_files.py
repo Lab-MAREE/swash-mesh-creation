@@ -289,7 +289,7 @@ def _add_breakwaters(
             )
             porosity[
                 y_position - 1 : y_position + 2,
-                x_position - 1 : x_position + 1,
+                x_position - 1 : x_position + length,
             ] = breakwater_porosity
         return bathymetry, porosity
     elif shape == "d":

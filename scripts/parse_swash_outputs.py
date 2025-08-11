@@ -154,7 +154,7 @@ def _create_animation(
     depth = bathymetry.max()
     elevation = bathymetry.min()
     # make the waves clearer by scaling the wave field
-    bathymetry = wave_field * 3 + np.expand_dims(bathymetry, 0)
+    bathymetry = wave_field * 10 + np.expand_dims(bathymetry, 0)
 
     frame_indices: list[int] = [0]
     for i in range(1, times.shape[0]):

@@ -22,14 +22,13 @@ def create_mesh(
         ]
     )
 
-    bathymetry, porosity, resolution, wavelength = swash.read_params(swash_dir)
+    bathymetry, porosity, resolution = swash.read_params(swash_dir)
 
     mesh.create_mesh(
         bathymetry,
         resolution,
         lc_fine=lc_fine,
         lc_coarse=lc_coarse,
-        wavelength=wavelength,
         interpolation=interpolation,
         porosity=porosity,
     )

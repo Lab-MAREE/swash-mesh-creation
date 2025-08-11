@@ -1,8 +1,10 @@
+import itertools
 import os
 import tempfile
 
 import gmsh
 import numpy as np
+import tqdm
 
 from . import triangle
 
@@ -17,7 +19,6 @@ def create_mesh(
     *,
     lc_fine: float,
     lc_coarse: float,
-    wavelength: float,
     interpolation: int,
     porosity: np.ndarray | None = None,
 ) -> None:
@@ -29,11 +30,9 @@ def create_mesh(
     y_max = (bathymetry.shape[0] - 1) * y_resolution
 
     print("Creating background mesh...")
-    # Create background mesh based on bathymetry
     background_mesh_file = _create_background_mesh(
         bathymetry,
         resolution,
-        wavelength,
         lc_fine,
         lc_coarse,
         porosity,
@@ -127,7 +126,6 @@ def _generate_mesh(
 def _create_background_mesh(
     bathymetry: np.ndarray,
     resolution: tuple[float, float],
-    wavelength: float,
     lc_fine: float,
     lc_coarse: float,
     porosity: np.ndarray | None = None,
@@ -138,59 +136,32 @@ def _create_background_mesh(
     Returns the path to the generated .pos file.
     """
     x_resolution, y_resolution = resolution
-    # Find maximum depth, handling cases where all bathymetry might be <= 0
-    water_depths = bathymetry[bathymetry > 0]
-    max_depth = np.max(water_depths) if water_depths.size > 0 else 1.0
+    max_depth = bathymetry.max()
 
-    # Calculate distance from shoreline for land points
-    shoreline_distances = _calculate_shoreline_distances(
-        bathymetry, resolution
-    )
-
-    # Identify breakwater locations if porosity data exists
-    is_breakwater = np.zeros_like(bathymetry, dtype=bool)
-    if porosity is not None:
-        is_breakwater = porosity != 1
-
-    # Create temporary file for background mesh
     with tempfile.NamedTemporaryFile(
         mode="w", suffix=".pos", delete=False
     ) as f:
         f.write('View "background mesh" {\n')
 
-        # Process each grid point
-        point_count = 0
-        for j in range(bathymetry.shape[0]):
-            for i in range(bathymetry.shape[1]):
-                x = i * x_resolution
-                y = j * y_resolution
-                depth = bathymetry[j, i]
-
-                # Breakwaters get fine resolution
-                if is_breakwater[j, i]:
-                    size = lc_fine
-                elif depth <= 0:  # Land or shoreline
-                    distance = shoreline_distances[j, i]
-                    if distance < wavelength:
-                        size = lc_fine
-                    else:
-                        size = lc_coarse
-                else:  # Water
-                    # Normalize depth to [0, 1] range
-                    depth_ratio = min(depth / max_depth, 1.0)
-
-                    # Apply selected interpolation method
-                    size = lc_fine + (lc_coarse - lc_fine) * depth_ratio ** (
-                        1 / interpolation
-                    )
-
-                # Ensure size is a valid float
-                if not np.isfinite(size):
-                    size = lc_coarse
-
-                # Write with explicit formatting to avoid locale issues
-                f.write(f"SP({x:.6f},{y:.6f},0){{{size:.6f}}};\n")
-                point_count += 1
+        for j, i in tqdm.tqdm(
+            itertools.product(
+                range(bathymetry.shape[0]), range(bathymetry.shape[1])
+            ),
+            "Creating background mesh...",
+            total=bathymetry.shape[0] * bathymetry.shape[1],
+        ):
+            x = i * x_resolution
+            y = j * y_resolution
+            depth_ratio = bathymetry[j, i] / max_depth
+            if porosity is not None and porosity[j, i] != 1:
+                size = lc_fine
+            elif depth_ratio <= 0:
+                size = lc_coarse * 10
+            else:
+                size = lc_fine + (lc_coarse - lc_fine) * depth_ratio ** (
+                    1 / interpolation
+                )
+            f.write(f"SP({x:.6f},{y:.6f},0){{{size:.6f}}};\n")
 
         f.write("};\n")
         f.flush()

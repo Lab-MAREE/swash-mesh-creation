@@ -3,8 +3,6 @@ from pathlib import Path
 import numpy as np
 import scipy.interpolate
 
-from . import wavelength
-
 ##########
 # public #
 ##########
@@ -28,7 +26,7 @@ def read_gauge_positions(swash_dir: Path) -> list[tuple[float, float]]:
 
 def read_params(
     swash_dir: Path,
-) -> tuple[np.ndarray, np.ndarray | None, tuple[float, float], float]:
+) -> tuple[np.ndarray, np.ndarray | None, tuple[float, float]]:
     bathymetry = np.loadtxt(swash_dir / "bathymetry.txt").astype(np.float64)
     if (swash_dir / "porosity.txt").exists():
         porosity = np.loadtxt(swash_dir / "porosity.txt").astype(np.float64)
@@ -39,8 +37,7 @@ def read_params(
     )
     if bathymetry.ndim != 2:
         raise ValueError("Mesh creation is only available for a 2D context.")
-    wavelength_ = _extract_wavelength(swash_dir, bathymetry)
-    return bathymetry, porosity, (x_resolution, y_resolution), wavelength_
+    return bathymetry, porosity, (x_resolution, y_resolution)
 
 
 def extract_shoreline_boundary(
@@ -107,18 +104,6 @@ def _get_input_dimensions(
                 y_resolution = float(line_[8])
 
     return (x_cells, y_cells), (x_resolution, y_resolution)
-
-
-def _extract_wavelength(swash_dir: Path, bathymetry: np.ndarray) -> float:
-    with open(swash_dir / "INPUT") as f:
-        for line in f:
-            if line.startswith("BOUND") and "SHAPESPEC" not in line:
-                line_ = line.strip().split()
-                wave_period = float(line_[7])
-    return wavelength.compute_wavelength(
-        wave_period,
-        np.max(bathymetry),
-    )
 
 
 def _read_mesh_nodes(
