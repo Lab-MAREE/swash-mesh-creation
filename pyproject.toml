@@ -13,6 +13,7 @@ dependencies = [
     "kaleido>=1.0.0",
     "numpy>=2.3.1",
     "plotly>=6.2.0",
+    "rasterio>=1.4.3",
     "scipy>=1.16.0",
     "typer>=0.16.0",
 ]

@@ -28,6 +28,7 @@ def create_mesh(
     x_max = (bathymetry.shape[1] - 1) * x_resolution
     y_max = (bathymetry.shape[0] - 1) * y_resolution
 
+    print("Creating background mesh...")
     # Create background mesh based on bathymetry
     background_mesh_file = _create_background_mesh(
         bathymetry,
@@ -38,6 +39,7 @@ def create_mesh(
         porosity,
         interpolation,
     )
+    print("Created background mesh.")
 
     # initialize gmsh
     gmsh.initialize()

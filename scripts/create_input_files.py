@@ -82,6 +82,13 @@ def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("path", help="Directory where to create the files")
     parser.add_argument(
+        "-u",
+        "--use-existing",
+        action="store_true",
+        default=False,
+        help="If the existing bathymetry.txt in the directory should be used",
+    )
+    parser.add_argument(
         "-s",
         "--shape",
         choices=["s", "d"],
