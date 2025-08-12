@@ -8,22 +8,6 @@ import scipy.interpolate
 ##########
 
 
-def read_gauge_positions(swash_dir: Path) -> list[tuple[float, float]]:
-    """Read gauge positions from gauges.txt if it exists."""
-    gauges_file = swash_dir / "gauges.txt"
-    if not gauges_file.exists():
-        return []
-
-    positions = []
-    with open(gauges_file) as f:
-        for line in f:
-            if line.strip():
-                parts = line.strip().split()
-                if len(parts) >= 2:
-                    positions.append((float(parts[0]), float(parts[1])))
-    return positions
-
-
 def read_params(
     swash_dir: Path,
 ) -> tuple[np.ndarray, np.ndarray | None, tuple[float, float]]:
