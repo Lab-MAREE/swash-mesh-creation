@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Convert Plotly HTML animation to MP4 video using existing Firefox."""
 
+import argparse
 import asyncio
-import os
 from pathlib import Path
 
 import cv2
@@ -10,7 +10,7 @@ import numpy as np
 from playwright.async_api import async_playwright
 
 
-async def capture_animation():
+async def capture_animation(html_file_path: Path):
     """Capture frames from the Plotly animation."""
     async with async_playwright() as p:
         # Use playwright's Firefox
@@ -22,8 +22,7 @@ async def capture_animation():
         page = await browser.new_page(viewport={"width": 2000, "height": 1200})
         
         # Load the HTML file
-        file_path = Path("water_level_animation.html").absolute()
-        await page.goto(f"file://{file_path}")
+        await page.goto(f"file://{html_file_path.absolute()}")
         
         # Wait for Plotly to load
         await page.wait_for_selector(".plotly", timeout=10000)
@@ -93,7 +92,7 @@ async def capture_animation():
         return frames
 
 
-def create_video(frames, output_path="water_level_animation.mp4", fps=10):
+def create_video(frames, output_path: Path, fps=10):
     """Create MP4 video from captured frames."""
     if not frames:
         print("No frames to process!")
@@ -124,14 +123,33 @@ def create_video(frames, output_path="water_level_animation.mp4", fps=10):
     print(f"Duration: {len(frames) / fps:.1f} seconds")
 
 
-async def main():
-    """Main function to convert HTML animation to video."""
+def main() -> None:
+    args = _parse_args()
+    html_file = Path(args.file)
+    
+    if not html_file.exists():
+        print(f"Error: HTML file '{html_file}' not found")
+        return
+    
+    output_file = html_file.with_suffix(".mp4")
+    
+    asyncio.run(_convert_animation(html_file, output_file))
+
+
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("file", help="HTML file to convert to MP4")
+    return parser.parse_args()
+
+
+async def _convert_animation(html_file: Path, output_file: Path) -> None:
+    """Convert HTML animation to video."""
     try:
-        frames = await capture_animation()
-        create_video(frames)
+        frames = await capture_animation(html_file)
+        create_video(frames, output_file)
     except Exception as e:
         print(f"Error: {e}")
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
