@@ -156,7 +156,7 @@ def _create_background_mesh(
             if porosity is not None and porosity[j, i] != 1:
                 size = lc_fine
             elif depth_ratio <= 0:
-                size = lc_coarse * 10
+                size = lc_coarse
             else:
                 size = lc_fine + (lc_coarse - lc_fine) * depth_ratio ** (
                     1 / interpolation
