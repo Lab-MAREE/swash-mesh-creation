@@ -1,6 +1,6 @@
 # Mesh Creation for SWASH
 
-A Python package that automatically transforms SWASH (Simulating WAves till SHore) input files from cartesian coordinates to unstructured meshes using gmsh. The mesh generation is adaptive, with refinement proportional to water depth - finest resolution near the shoreline and coarsest at maximum depth. Breakwaters (identified by porosity ≠ 1) automatically receive the finest resolution.
+A Python package that automatically transforms SWASH (Simulating WAves till SHore) input files from cartesian coordinates to unstructured meshes using gmsh. The mesh generation is adaptive, with refinement proportional to water depth --- finest resolution near the shoreline and coarsest at maximum depth. Breakwaters (identified by porosity ≠ 1) automatically receive the finest resolution.
 
 ## Features
 
@@ -134,5 +134,5 @@ Core dependencies:
 ## Future Work
 
 - Adapt this package to use parameters given as function or cli arguments instead of reading the SWASH input file so it's usable with any program 
-- Refine the detections of breakwaters so it's more robust than simply using porosity
+- Refine the detections of breakwaters so it's more robust than simply the proxy of porosity
 - Use the shorelines as boundaries in the mesh generation to completely remove land surfaces rather than making the mesh larger at those locations
